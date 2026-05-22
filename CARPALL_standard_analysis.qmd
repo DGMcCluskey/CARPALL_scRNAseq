@@ -1,0 +1,194 @@
+---
+title: "CARPALL standard analysis"
+format: html
+---
+
+```{r}
+setwd("C:/Users/dan_m/OneDrive - University College London/Documents/CARPALL_scRNAseq_raw")
+```
+
+```{r}
+library(Seurat)
+library(SeuratData)
+library(SeuratObject)
+library(ggplot2)
+library(RColorBrewer)
+library(harmony)
+library(clustree)
+library(SingleR)
+library(tidyr)
+library(viridis)
+library(dplyr)
+library(data.table)
+library(scCustomize)
+library(broom)
+library(purrr)
+library(reticulate)
+library(SeuratWrappers)
+library(gridExtra)
+library(cowplot)
+library(patchwork)
+library(DoubletFinder)
+```
+
+### get ist of files from the working directory. i will keep certain files (as some are not going to be analysed, as they were aligned/sequenced with different settings)
+
+```{r}
+files <- list.files(path = getwd())
+files <- files[c(19:115)]
+files
+data <- list()
+```
+
+### there are more samples in this folder than samples listed in the metadata, so i need to find out what the extra samples are and if they should be kept
+### metadata comes from Nathan's github
+### the metadata in the paper is laid out differently, so difficult to reorganise (and might be different in general)
+```{r}
+metadata <- readxl::read_xlsx("metadata_for_analysis.xlsx")
+```
+
+```{r}
+filenames <- sub(".*(CAR-T[0-9]+).*", "\\1", files)
+different_files <- setdiff(filenames, metadata$GEX_Sample)
+# based on this, there are 9 samples that have (what appears) to be GEX files, but in the metadata these should only be TCR sequenced files
+# until i establish what these are, it's probably safest to exclude them
+```
+
+```{r}
+files_to_keep <- filenames %in% metadata$GEX_Sample
+files <- files[files_to_keep]
+```
+
+### create seurat objects from chosen samples
+```{r}
+for (i in files) {
+  # Read 10X data
+  seurat_data <- Read10X(data.dir = i)
+  # Handle both list (multi-assay) and matrix (single-assay) formats
+  if (is.list(seurat_data)) {
+    # Prefer "Gene Expression" if present
+    if ("Gene Expression" %in% names(seurat_data)) {
+      counts <- seurat_data[["Gene Expression"]]
+    } else {
+      warning(paste("No 'Gene Expression' assay found for", i, "- skipping this sample"))
+      next  # skip this sample
+    }
+  } else {
+    # Single assay: assume it's gene expression
+    counts <- seurat_data
+  }
+  
+  # Rename cells to include sample ID to avoid barcode collision
+  colnames(counts) <- paste(i, colnames(counts), sep = "_")
+  # Create Seurat object
+  data[[i]] <- CreateSeuratObject(counts = counts, 
+                                  min.features = 100, 
+                                  project = i)
+}
+
+sample_names <- names(data)
+
+#give each sample its own name
+for (i in seq_along(data)) {
+  data[[i]]$orig.ident <- sample_names[i]
+}
+
+#merge all samples into one seurat object called sepsis
+carpall <- merge(
+  x = data[[1]],
+  y = data[-1],
+  add.cell.ids = sample_names,
+  project = "CARPALL"
+)
+```
+
+### remove temporary data object and add sample column
+```{r}
+rm(data)
+table(carpall$orig.ident)
+carpall$sample <- carpall$orig.ident
+table(carpall$sample)
+carpall
+```
+
+### each sample is a layer currenty, so we join them
+```{r}
+carpall <- JoinLayers(carpall)
+carpall
+```
+
+### DOUBLET DETECTION
+### samples with fewer than 50 cells will cause scdblfinder to fail, so should be removed. also in general so fews cells is unreliable for analysis - this removed 2 samples
+```{r}
+library(scDblFinder)
+library(BiocParallel)
+sce <- as.SingleCellExperiment(carpall)
+
+cell_counts <- table(carpall$sample)
+bad_samples <- names(cell_counts[cell_counts < 50])
+sce <- sce[, !(sce$sample %in% bad_samples)]
+
+dim(sce)
+
+sce <- scDblFinder(sce, samples="sample", dbr.sd=1)
+table(sce$scDblFinder.class)
+table(sce$scDblFinder.score)
+```
+
+### add doublet metrics to seurat object
+```{r}
+carpall$scDblFinder.class <- NA
+carpall$scDblFinder.score <- NA
+
+common_cells <- intersect(colnames(carpall), colnames(sce))
+
+carpall$scDblFinder.class[common_cells] <- sce$scDblFinder.class
+carpall$scDblFinder.score[common_cells] <- sce$scDblFinder.score
+```
+
+### remove sce object for memory
+```{r}
+rm(sce)NormalizeData
+```
+
+### FILTERING
+```{r}
+carpall[["percent.mt"]] <- PercentageFeatureSet(carpall, pattern = "^MT-")
+VlnPlot(carpall, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size = 0)
+```
+
+```{r}
+carpall <- subset(carpall, subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & percent.mt < 20)
+```
+
+### FILTERED SAVE/LOAD POINT
+```{r}
+#saveRDS(carpall, file="CARPALL_filtered.rds", compress=F)
+carpall <- readRDS(file="CARPALL_filtered.rds")
+```
+
+### PROCESSING
+```{r}
+carpall <- NormalizeData(carpall)
+carpall <- FindVariableFeatures(carpall)
+carpall <- ScaleData(carpall, vars.to.regress = c("nCount_RNA", "percent.mt"))
+carpall <- RunPCA(carpall)
+ElbowPlot(carpall)
+```
+
+### PROCESSED SAVE/LOAD POINT
+```{r}
+saveRDS(carpall, file="CARPALL_processed.rds", compress=F)
+carpall <- readRDS(file="CARPALL_processed.rds")
+```
+
+### CLUSTERING
+```{r}
+carpall <- FindNeighbors(carpall, dims = 1:12, reduction = "pca")
+carpall <- RunUMAP(carpall, dims = 1:12, reduction = "pca", seed.use =61)
+```
+
+```{r}
+DimPlot(carpall, group.by = "sample")
+FeaturePlot(carpall, color = ("CAT-scFv", "CD8A", "CCR7", "TCF7"))
+```
