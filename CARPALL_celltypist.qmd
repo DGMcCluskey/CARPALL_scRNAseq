@@ -1,0 +1,105 @@
+---
+title: "Untitled"
+format: html
+---
+
+
+```{python}
+import scanpy as sc
+import celltypist
+from celltypist import models
+import pandas as pd
+```
+
+```{python}
+models.download_models(
+    force_update=True, 
+    model=["Immune_All_High.pkl"]
+)
+model_immune_high = models.Model.load(model="Immune_All_High.pkl")
+
+models.download_models(
+    force_update=True, 
+    model=["Immune_All_Low.pkl"]
+)
+model_immune_low = models.Model.load(model="Immune_All_Low.pkl")
+```
+
+```{python}
+adata = sc.read_h5ad("C:/Users/dan_m/oneDrive - University College London/documents/carPALL_scRNAseq_raw/carPALL_celltypist_input.h5ad")
+adata
+adata.X = adata.layers["logcounts"]
+adata.var_names[:5]
+adata.X
+```
+
+```{python}
+results = []
+
+for p in adata.obs["Patient"].unique():
+    ad = adata[adata.obs["Patient"] == p].copy()
+
+    # =========================
+    # HIGH-RES MODEL
+    # =========================
+    pred_high = celltypist.annotate(
+        ad,
+        model="Immune_All_High.pkl"
+    )
+
+    ad_high = pred_high.to_adata(insert_conf=True)
+
+    high_labels = ad_high.obs[["predicted_labels"]].rename(
+        columns={"predicted_labels": "celltypist_high_label"}
+    )
+
+    # confidence = probability of assigned label
+    high_conf = ad_high.obs[["conf_score"]].rename(
+        columns={"conf_score": "celltypist_high_score"}
+    )
+
+    # =========================
+    # LOW-RES MODEL
+    # =========================
+    pred_low = celltypist.annotate(
+        ad,
+        model="Immune_All_Low.pkl"
+    )
+
+    ad_low = pred_low.to_adata(insert_conf=True)
+
+    low_labels = ad_low.obs[["predicted_labels"]].rename(
+        columns={"predicted_labels": "celltypist_low_label"}
+    )
+
+    low_conf = ad_low.obs[["conf_score"]].rename(
+        columns={"conf_score": "celltypist_low_score"}
+    )
+
+    # =========================
+    # COMBINE
+    # =========================
+    df = pd.concat(
+        [high_labels, high_conf, low_labels, low_conf],
+        axis=1
+    )
+
+    df["patient"] = p
+    df.index = ad.obs_names
+    results.append(df)
+```
+
+```{python}
+final_df = pd.concat(results)
+```
+
+```{python}
+adata.obs = adata.obs.join(final_df)
+```
+```{python}
+adata.obs
+```
+
+```{python}
+adata.obs.to_csv("celltypist_results.csv")
+```

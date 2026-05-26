@@ -26,6 +26,7 @@ library(ggsci)
 library(ggthemes)
 library(ggplot2)
 library(DoubletFinder)
+library(anndataR)
 ```
 
 ### get ist of files from the working directory. i will keep certain files (as some are not going to be analysed, as they were aligned/sequenced with different settings)
@@ -221,4 +222,18 @@ DimPlot(carpall, group.by = c("Patient", "Timepoint_bin", "Sort", "Source"))&sca
 
 ```{r}
 FeaturePlot(carpall, features = c("CAT-scFv", "CD3D", "CD8A", "LYZ", "CD79A", "NCAM1"))&scale_colour_viridis(option = "F", direction = -1)
+```
+
+### save as a h5 file for use in python to apply celltypist
+```{r}
+sce <- as.SingleCellExperiment(carpall)
+assayNames(sce)
+```
+
+```{r}
+assays(sce) <- assays(sce)["logcounts"]
+```
+
+```{r}
+write_h5ad(sce, "CARPALL_celltypist_input.h5ad")
 ```
