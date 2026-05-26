@@ -9,25 +9,22 @@ setwd("C:/Users/dan_m/OneDrive - University College London/Documents/CARPALL_scR
 
 ```{r}
 library(Seurat)
-library(SeuratData)
 library(SeuratObject)
-library(ggplot2)
 library(RColorBrewer)
 library(harmony)
 library(clustree)
-library(SingleR)
 library(tidyr)
 library(viridis)
 library(dplyr)
 library(data.table)
 library(scCustomize)
-library(broom)
-library(purrr)
-library(reticulate)
 library(SeuratWrappers)
 library(gridExtra)
 library(cowplot)
 library(patchwork)
+library(ggsci)
+library(ggthemes)
+library(ggplot2)
 library(DoubletFinder)
 ```
 
@@ -178,7 +175,7 @@ ElbowPlot(carpall)
 
 ### PROCESSED SAVE/LOAD POINT
 ```{r}
-saveRDS(carpall, file="CARPALL_processed.rds", compress=F)
+#saveRDS(carpall, file="CARPALL_processed.rds", compress=F)
 carpall <- readRDS(file="CARPALL_processed.rds")
 ```
 
@@ -188,7 +185,40 @@ carpall <- FindNeighbors(carpall, dims = 1:12, reduction = "pca")
 carpall <- RunUMAP(carpall, dims = 1:12, reduction = "pca", seed.use =61)
 ```
 
+### EMBEDDED SAVE/LOAD POINT
 ```{r}
-DimPlot(carpall, group.by = "sample")
-FeaturePlot(carpall, color = ("CAT-scFv", "CD8A", "CCR7", "TCF7"))
+#saveRDS(carpall, file="CARPALL_embedded.rds", compress=F)
+carpall <- readRDS(file="CARPALL_embedded.rds")
+```
+
+### make sample id cleaner and also compatible with metadata
+```{r}
+carpall$sample_id <- sub(".*(CAR-T[0-9]+).*", "\\1", carpall$sample)
+```
+
+### add metadata to seurat object
+```{r}
+metadata <- as.data.frame(metadata)
+rownames(metadata) <- metadata$GEX_Sample
+meta_to_add <- metadata[
+  carpall$sample_id,
+  c("Patient", "Sort", "Source", "Timepoint", "Timepoint_bin")
+]
+
+rownames(meta_to_add) <- colnames(carpall)
+
+carpall <- AddMetaData(carpall, meta_to_add)
+```
+
+### check numbers look reasonable
+```{r}
+table(carpall$Patient, carpall$Timepoint_bin)
+```
+
+```{r}
+DimPlot(carpall, group.by = c("Patient", "Timepoint_bin", "Sort", "Source"))&scale_colour_npg()&theme_void()
+```
+
+```{r}
+FeaturePlot(carpall, features = c("CAT-scFv", "CD3D", "CD8A", "LYZ", "CD79A", "NCAM1"))&scale_colour_viridis(option = "F", direction = -1)
 ```
