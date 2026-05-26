@@ -239,7 +239,7 @@ assays(sce) <- assays(sce)["logcounts"]
 write_h5ad(sce, "CARPALL_celltypist_input.h5ad")
 ```
 
-### after runnign celltypist script load in information to sdd to seurat object
+### after runnign celltypist script load in information to add to seurat object
 ```{r}
 setwd("C:/Users/dan_m/OneDrive - University College London/Ghorashian_group/CARPALL_scRNAseq/")
 celltypist <- read.csv("celltypist_results.csv", row.names = 1)
@@ -307,4 +307,10 @@ ggsave(plot=p, filename="umap_celltypist_cleaned_split.png", dpi=300, height = 1
 
 ```{r}
 Proportion_Plot(carpall, group.by="celltypist_cleaned", split.by="Timepoint_bin")+scale_fill_d3("category20")
+```
+
+### ANNOTATED SAVE/LOAD POINT (in a full analysis i'd have manually annotated, but here im just using celltypist as a guide for now)
+```{r}
+saveRDS(carpall, file="CARPALL_annotated.rds", compress=F)
+carpall <- readRDS(file="CARPALL_annotated.rds")
 ```
