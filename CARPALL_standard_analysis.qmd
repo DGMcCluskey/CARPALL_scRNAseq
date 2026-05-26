@@ -27,6 +27,7 @@ library(ggthemes)
 library(ggplot2)
 library(DoubletFinder)
 library(anndataR)
+library(cartography)
 ```
 
 ### get ist of files from the working directory. i will keep certain files (as some are not going to be analysed, as they were aligned/sequenced with different settings)
@@ -236,4 +237,74 @@ assays(sce) <- assays(sce)["logcounts"]
 
 ```{r}
 write_h5ad(sce, "CARPALL_celltypist_input.h5ad")
+```
+
+### after runnign celltypist script load in information to sdd to seurat object
+```{r}
+setwd("C:/Users/dan_m/OneDrive - University College London/Ghorashian_group/CARPALL_scRNAseq/")
+celltypist <- read.csv("celltypist_results.csv", row.names = 1)
+```
+
+### check cell id names match
+```{r}
+head(rownames(celltypist))
+head(colnames(carpall))
+```
+
+### align objects on common cells (this should be all cells if done right)
+```{r}
+common_cells <- intersect(colnames(carpall), rownames(celltypist))
+```
+
+### add metadata columns
+```{r}
+carpall$celltypist_high_label <- NA
+carpall$celltypist_high_score <- NA
+carpall$celltypist_low_label <- NA
+carpall$celltypist_low_score <- NA
+```
+
+```{r}
+carpall$celltypist_high_label[common_cells] <- celltypist[common_cells, "celltypist_high_label"]
+carpall$celltypist_high_score[common_cells] <- celltypist[common_cells, "celltypist_high_score"]
+
+carpall$celltypist_low_label[common_cells] <- celltypist[common_cells, "celltypist_low_label"]
+carpall$celltypist_low_score[common_cells] <- celltypist[common_cells, "celltypist_low_score"]
+```
+
+### assess umap
+```{r}
+DimPlot(carpall, group.by = c("celltypist_high_label"))&theme_void()
+```
+
+### adding a cleaned up celltypist column, whereby i use the immune high model results, but put any celltype with fewer than 735 cells (which is < 0.01% of all cells) into "Other" to make cleaner plots
+```{r}
+celltype_counts <- table(carpall$celltypist_high_label)
+
+# identify labels with <100 cells
+small_types <- names(celltype_counts[celltype_counts < 735])
+
+# create cleaned column
+carpall$celltypist_cleaned <- ifelse(
+  carpall$celltypist_high_label %in% small_types,
+  "Other",
+  carpall$celltypist_high_label
+)
+
+```
+
+```{r}
+p <- DimPlot(carpall, group.by = c("celltypist_cleaned"), raster = F)&theme_void()&scale_colour_d3("category20")
+p
+ggsave(plot=p, filename="umap_celltypist_cleaned.png", dpi=300, height = 6, width = 8, bg="white")
+```
+
+```{r}
+p <- DimPlot(carpall, group.by = "celltypist_cleaned", split.by = "celltypist_cleaned", raster = F, ncol = 4, pt.size = 0.1)&theme_void()&scale_colour_d3("category20")
+p
+ggsave(plot=p, filename="umap_celltypist_cleaned_split.png", dpi=300, height = 12, width = 14, bg="white")
+```
+
+```{r}
+Proportion_Plot(carpall, group.by="celltypist_cleaned", split.by="Timepoint_bin")+scale_fill_d3("category20")
 ```
