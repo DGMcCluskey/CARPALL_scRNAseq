@@ -25,8 +25,169 @@ library(ggplot2)
 library(DoubletFinder)
 library(anndataR)
 library(cartography)
+library(DESeq2)
 ```
 
 ```{r}
 catcar <- readRDS("CARPALL_CD3posCATpos.rds")
+```
+
+### run processing pipeline again
+```{r}
+catcar <- NormalizeData(catcar)
+catcar <- FindVariableFeatures(catcar)
+catcar <- ScaleData(catcar, vars.to.regress = c("nCount_RNA", "percent.mt"))
+catcar <- RunPCA(catcar)
+ElbowPlot(catcar)
+```
+
+### batch correction using harmony
+### i'm going to use patient as the batch key as a reasonable stop-gap until i know the true batches
+
+```{r}
+catcar <- RunHarmony(catcar, group.by.vars = c("Patient"))
+```
+
+
+### run clustering and embedding
+```{r}
+catcar <- FindNeighbors(catcar, dims = 1:12, reduction = "harmony")
+catcar <- RunUMAP(catcar, dims = 1:12, reduction = "harmony", seed.use =61)
+resolutions <- c(0.5,0.6,0.7,0.8,0.9,1)
+for (i in resolutions) {
+    catcar <- FindClusters(catcar, resolution = i, cluster.name = paste0("resolution_",i))
+}
+```
+
+```{r}
+DimPlot(catcar, group.by = c("Patient", "Timepoint_bin", "Source"), ncol=1)&scale_colour_npg()&theme_void()
+```
+
+```{r}
+DimPlot(catcar, group.by = c("celltypist_high_label"))&theme_void()
+FeaturePlot(catcar, features = c("celltypist_low_score", "celltypist_high_score"))&theme_void()
+```
+
+### clean up detailed celltypist labels to bin rare populations into "other"
+### any population less than 1% of cells (1860 cells) is labelled as other
+```{r}
+celltype_counts <- table(catcar$celltypist_low_label)
+
+# identify labels with <100 cells
+small_types <- names(celltype_counts[celltype_counts < 1860])
+
+# create cleaned column
+catcar$celltypist_cleaned <- ifelse(
+  catcar$celltypist_low_label %in% small_types,
+  "Other",
+  catcar$celltypist_low_label
+)
+```
+
+```{r}
+p <- DimPlot(catcar, group.by = c("celltypist_cleaned"), raster = F)&theme_void()&scale_colour_d3("category20")
+p
+ggsave(plot=p, filename="car_only_umap_celltypist_cleaned.png", dpi=300, height = 6, width = 8, bg="white")
+```
+
+### PSEUDOBULK DIFFERENTIAL EXPRESSION ANALYSIS
+### comparing timepoints of product first
+```{r}
+Idents(catcar) <- "Timepoint_bin"
+bulk_catcar <- AggregateExpression(catcar, assays="RNA", return.seurat=T, group.by = c("Patient", "Timepoint_bin"))
+colnames(bulk_catcar)
+```
+
+### aggregating messes with metadata columns, so adding back in
+```{r}
+meta <- data.frame(sample = colnames(bulk_catcar))
+meta <- separate(
+    meta,
+    col = sample,
+    into = c("Patient", "Timepoint_bin"),
+    sep = "_"
+)
+rownames(meta) <- colnames(bulk_catcar)
+bulk_catcar <- AddMetaData(
+    bulk_catcar,
+    metadata = meta
+)
+```
+
+
+### set up deseq dataset
+```{r}
+counts <- GetAssayData(
+    bulk_catcar,
+    slot = "counts"
+)
+
+dds <- DESeqDataSetFromMatrix(
+    countData = counts,
+    colData = bulk_catcar@meta.data,
+    design = ~ Patient + Timepoint_bin
+)
+```
+
+
+### first running LRT test just to identify genes different at any point over time
+```{r}
+dds <- DESeq(dds, test = "LRT", reduced = ~ Patient)
+res_lrt <- results(dds)
+res_lrt_df <- as.data.frame(res_lrt)
+sig_lrt <- subset(
+    res_lrt_df,
+    padj < 0.05
+)
+```
+
+### now running specific contrasts (for example late vs rest) to get specific signature at a timepoint
+### this suses the default wald test
+### need to also add a new grouping variable to object
+
+```{r}
+bulk_catcar$Late_vs_Other <- ifelse(
+  bulk_catcar$Timepoint_bin == "Late",
+  "Late",
+  "Other"
+)
+bulk_catcar$Late_vs_Other <- factor(bulk_catcar$Late_vs_Other)
+```
+
+
+```{r}
+dds <- DESeqDataSetFromMatrix(
+  countData = counts,
+  colData = bulk_catcar@meta.data,
+  design = ~ Patient + Late_vs_Other
+)
+
+dds <- DESeq(dds)
+```
+
+```{r}
+res_late <- results(dds, contrast = c("Late_vs_Other", "Late", "Other"))
+res_late_df <- as.data.frame(res_late)
+res_late_df$gene <- rownames(res_late_df)
+sig_late <- subset(
+    res_late_df,
+    padj < 0.05
+)
+```
+
+```{r}
+library(clusterProfiler)
+library(org.Hs.eg.db)
+```
+
+
+```{r}
+gsea_input <- res_late_df$stat
+names(gsea_input) <- res_late_df$gene
+gsea_input <- na.omit(gsea_input)
+gsea_input <- sort(gsea_input, decreasing = T)
+```
+
+```{r}
+gse <- gseGO(geneList=gsea_input, OrgDb = org.Hs.eg.db, keyType = "SYMBOL")
 ```
