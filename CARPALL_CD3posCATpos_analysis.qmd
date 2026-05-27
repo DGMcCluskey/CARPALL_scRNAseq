@@ -1,0 +1,32 @@
+---
+title: "Untitled"
+format: html
+---
+
+
+```{r}
+library(Seurat)
+library(SeuratObject)
+library(RColorBrewer)
+library(harmony)
+library(clustree)
+library(tidyr)
+library(viridis)
+library(dplyr)
+library(data.table)
+library(scCustomize)
+library(SeuratWrappers)
+library(gridExtra)
+library(cowplot)
+library(patchwork)
+library(ggsci)
+library(ggthemes)
+library(ggplot2)
+library(DoubletFinder)
+library(anndataR)
+library(cartography)
+```
+
+```{r}
+catcar <- readRDS("CARPALL_CD3posCATpos.rds")
+```

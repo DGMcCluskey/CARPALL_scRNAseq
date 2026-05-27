@@ -321,3 +321,7 @@ Idents(carpall) <- "Sort"
 catcar <- subset(carpall, idents = c("CD3+CAT+"))
 table(catcar$Sort)
 ```
+
+```{r}
+saveRDS(catcar, file="CARPALL_CD3posCATpos.rds", compress = F)
+```
