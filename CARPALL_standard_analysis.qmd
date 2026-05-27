@@ -314,3 +314,10 @@ Proportion_Plot(carpall, group.by="celltypist_cleaned", split.by="Timepoint_bin"
 saveRDS(carpall, file="CARPALL_annotated.rds", compress=F)
 carpall <- readRDS(file="CARPALL_annotated.rds")
 ```
+
+### subset just CAT+CAR T cells for further analysis in a separate script
+```{r}
+Idents(carpall) <- "Sort"
+catcar <- subset(carpall, idents = c("CD3+CAT+"))
+table(catcar$Sort)
+```
