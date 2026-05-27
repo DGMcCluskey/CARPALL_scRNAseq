@@ -15,7 +15,6 @@ library(viridis)
 library(dplyr)
 library(data.table)
 library(scCustomize)
-library(SeuratWrappers)
 library(gridExtra)
 library(cowplot)
 library(patchwork)
@@ -41,13 +40,13 @@ catcar <- RunPCA(catcar)
 ElbowPlot(catcar)
 ```
 
+
 ### batch correction using harmony
 ### i'm going to use patient as the batch key as a reasonable stop-gap until i know the true batches
 
 ```{r}
 catcar <- RunHarmony(catcar, group.by.vars = c("Patient"))
 ```
-
 
 ### run clustering and embedding
 ```{r}
@@ -59,6 +58,14 @@ for (i in resolutions) {
 }
 ```
 
+### SAVE/LOAD POINT
+```{r}
+saveRDS(catcar, file = "car_only_clustered.rds", compress = F)
+catcar <- readRDS("car_only_clustered.rds")
+```
+
+
+### exploratory plots
 ```{r}
 DimPlot(catcar, group.by = c("Patient", "Timepoint_bin", "Source"), ncol=1)&scale_colour_npg()&theme_void()
 ```
