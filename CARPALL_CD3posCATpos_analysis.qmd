@@ -80,16 +80,34 @@ catcar$Timepoint_bin <- factor(catcar$Timepoint_bin, levels = c("Product", "Earl
 
 ### exploratory plots
 ```{r}
-DimPlot(catcar, group.by = c("Patient", "Timepoint_bin", "Source", "Remission"))&scale_colour_npg()&theme_void()
+p <-DimPlot(catcar, group.by = c("Patient", "Timepoint_bin", "Source", "Remission"))&scale_colour_npg()&
+    theme_void() &
+    guides(color = guide_legend(override.aes = list(size = 6))) &
+    theme(
+        legend.text = element_text(size = 14),
+        legend.title = element_text(size = 16),
+        plot.title = element_text(size = 18, face = "bold")
+    )
+p
+ggsave(plot=p, filename="car_only_umap_metadata.png", dpi=300, height = 10, width = 12, bg="white")
 ```
 
 ```{r}
-FeaturePlot(catcar, features = c("CAT-scFv", "CD3D", "CD8A", "LYZ", "CD79A", "FOXP3", "TIGIT", "KLRB1", "GZMB"))&scale_colour_viridis(option = "F", direction = -1)
+p <- FeaturePlot(catcar, features = c("CAT-scFv", "CD3D", "CD8A", "LYZ", "CD79A", "FOXP3", "TIGIT", "KLRB1", "GZMB"))&scale_colour_viridis(option = "F", direction = -1)&theme_void()&NoLegend()&
+    theme(
+        legend.text = element_text(size = 14),
+        legend.title = element_text(size = 16),
+        plot.title = element_text(size = 18, face = "bold")
+    )
+p
+ggsave(plot=p, filename = "car_only_key_marker_featureplot.png", dpi=300,height=10,width=12)
 ```
 
 ```{r}
 DimPlot(catcar, group.by = c("celltypist_high_label"))&theme_void()
-FeaturePlot(catcar, features = c("celltypist_low_score", "celltypist_high_score"))&theme_void()
+FeaturePlot(catcar, features = c("celltypist_low_score", "celltypist_high_score"))&
+    theme_void()&
+    scale_colour_viridis(option = "F", direction = -1)
 ```
 
 ### clean up detailed celltypist labels to bin rare populations into "other"
@@ -108,11 +126,28 @@ catcar$celltypist_cleaned <- ifelse(
 )
 ```
 
+### make unified colour palette for plots
+```{r}
+celltypes <- levels(factor(catcar$celltypist_cleaned))
+
+cols <- pal_d3("category20")(length(celltypes))
+
+names(cols) <- celltypes
+```
+
 ```{r}
 p <- DimPlot(catcar, group.by = c("celltypist_cleaned"), raster = F)&theme_void()&scale_colour_d3("category20")
 p
 ggsave(plot=p, filename="car_only_umap_celltypist_cleaned.png", dpi=300, height = 6, width = 8, bg="white")
 ```
+
+### proportions of celltypist populations
+```{r}
+p <- Proportion_Plot(catcar, group.by="celltypist_cleaned", split.by="Timepoint_bin")+scale_fill_manual(values = cols)
+p
+ggsave(plot=p, filename = "catcar_celltypist_cleaned_proportions_by_time.png", dpi=300, height = 6, width = 6)
+```
+
 
 ### PSEUDOBULK DIFFERENTIAL EXPRESSION ANALYSIS
 ### comparing timepoints of product first
@@ -178,7 +213,7 @@ degs_filtered <- pct_exp %>%
     filter(if_any(-features.plot, ~ . >= 25))
 degs_filtered <- as.data.frame(degs_filtered)
 lrt_degs_filtered <- filter(sig_lrt, rownames(sig_lrt) %in% degs_filtered$features.plot)
-top50_lrt_degs <- lrt_degs_filtered %>% arrange(padj) %>% slice_head(n=50)
+top25_lrt_degs <- lrt_degs_filtered %>% arrange(padj) %>% slice_head(n=25)
 ```
 
 
@@ -186,16 +221,19 @@ top50_lrt_degs <- lrt_degs_filtered %>% arrange(padj) %>% slice_head(n=50)
 ```{r}
 p <- Clustered_DotPlot(
     catcar,
-    features = rownames(top50_lrt_degs),
+    features = rownames(top25_lrt_degs),
     group.by = "Timepoint_bin",
     k = 4,
+    column_label_size = 10,
+    row_label_size=12,
+    cluster_ident = F,
     plot_km_elbow = FALSE
 )
 
 png(
     filename = "topdegs_clustered_dotplot.png",
-    width = 3000,
-    height = 4000,
+    width = 1200,
+    height = 2000,
     res = 300
 )
 
@@ -204,7 +242,7 @@ draw(p)
 dev.off()
 ```
 
-### the major differences are between the product and all other timepoints, so i will also run deseq2 without thhe product cells, to specifically look for differences between early, mid and late
+### the major differences are between the product and all other timepoints, so i will also run deseq2 without the product cells, to specifically look for differences between early, mid and late
 ```{r}
 Idents(bulk_catcar) <- "Timepoint_bin"
 no_product <- subset(bulk_catcar, idents = c("Early", "Mid", "Late"))
@@ -253,14 +291,16 @@ p <- Clustered_DotPlot(
     features = rownames(lrt_degs_filtered),
     group.by = "Timepoint_bin",
     k = 5,
+    column_label_size = 10,
+    row_label_size=12,
     cluster_ident = F,
     plot_km_elbow = F
 )
 
 png(
     filename = "no_product_topdegs_clustered_dotplot.png",
-    width = 3000,
-    height = 4000,
+    width = 1200,
+    height = 2000,
     res = 300
 )
 
@@ -269,7 +309,20 @@ draw(p)
 dev.off()
 ```
 
+### based off of DEGs I'll inspect some specific ones to see if they differ based on remission status
 
+```{r}
+catcar$time_outcome <- paste0(catcar$Timepoint_bin, "_", catcar$Remission)
+```
+
+
+```{r}
+FeaturePlot_scCustom(catcar, features = c("IFNAR2"), split.by = "time_outcome", num_columns = 4)&
+    scale_colour_viridis(option = "F", direction = -1)&
+    theme_void()&NoLegend()&
+    theme(plot.title = element_text(size = 12, face = "bold")
+    )
+```
 
 ### now running specific contrasts (for example late vs rest) to get specific signature at a timepoint
 ### this suses the default wald test

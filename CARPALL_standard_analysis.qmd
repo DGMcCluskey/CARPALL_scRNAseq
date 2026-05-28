@@ -218,11 +218,28 @@ table(carpall$Patient, carpall$Timepoint_bin)
 ```
 
 ```{r}
-DimPlot(carpall, group.by = c("Patient", "Timepoint_bin", "Sort", "Source"))&scale_colour_npg()&theme_void()
+carpall$Timepoint_bin <- factor(carpall$Timepoint_bin, levels = c("Product", "Early", "Mid", "Late"))
+p <-DimPlot(carpall, group.by = c("Patient", "Timepoint_bin", "Source", "Sort"))&scale_colour_npg()&
+    theme_void() &
+    guides(color = guide_legend(override.aes = list(size = 6))) &
+    theme(
+        legend.text = element_text(size = 14),
+        legend.title = element_text(size = 16),
+        plot.title = element_text(size = 18, face = "bold")
+    )
+p
+ggsave(plot=p, filename="carpall_umap_metadata.png", dpi=300, height = 10, width = 12, bg="white")
 ```
 
 ```{r}
-FeaturePlot(carpall, features = c("CAT-scFv", "CD3D", "CD8A", "LYZ", "CD79A", "NCAM1"))&scale_colour_viridis(option = "F", direction = -1)
+p <- FeaturePlot(carpall, features = c("CAT-scFv", "CD3D", "CD8A", "LYZ", "CD79A", "NCAM1"))&scale_colour_viridis(option = "F", direction = -1)&theme_void()&NoLegend()&
+    theme(
+        legend.text = element_text(size = 14),
+        legend.title = element_text(size = 16),
+        plot.title = element_text(size = 18, face = "bold")
+    )
+p
+ggsave(plot=p, filename="carpall_key_marker_featureplot.png", dpi=300,height=10, width=10)
 ```
 
 ### save as a h5 file for use in python to apply celltypist
@@ -299,6 +316,14 @@ p
 ggsave(plot=p, filename="umap_celltypist_cleaned.png", dpi=300, height = 6, width = 8, bg="white")
 ```
 
+### create a unified colour palette that wont change
+```{r}
+celltypes <- levels(factor(carpall$celltypist_cleaned))
+
+cols <- pal_d3("category20")(length(celltypes))
+
+names(cols) <- celltypes
+```
 ```{r}
 p <- DimPlot(carpall, group.by = "celltypist_cleaned", split.by = "celltypist_cleaned", raster = F, ncol = 4, pt.size = 0.1)&theme_void()&scale_colour_d3("category20")
 p
@@ -306,7 +331,9 @@ ggsave(plot=p, filename="umap_celltypist_cleaned_split.png", dpi=300, height = 1
 ```
 
 ```{r}
-Proportion_Plot(carpall, group.by="celltypist_cleaned", split.by="Timepoint_bin")+scale_fill_d3("category20")
+p <- Proportion_Plot(carpall, group.by="celltypist_cleaned", split.by="Timepoint_bin")+scale_fill_manual(values = cols)
+p
+ggsave(plot=p, filename = "carpall_celltypist_cleaned_proportions_by_time.png", dpi=300, height = 6, width = 6)
 ```
 
 ### ANNOTATED SAVE/LOAD POINT (in a full analysis i'd have manually annotated, but here im just using celltypist as a guide for now)
