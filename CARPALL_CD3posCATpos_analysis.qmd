@@ -313,15 +313,19 @@ dev.off()
 
 ```{r}
 catcar$time_outcome <- paste0(catcar$Timepoint_bin, "_", catcar$Remission)
+catcar$time_outcome <- factor(catcar$time_outcome, levels = c("Early_Relapse", "Early_Remission", "Mid_Relapse", "Mid_Remission", "Late_Relapse", "Late_Remission", "Product_Remission"))
+Idents(catcar) <- "Timepoint_bin"
+no_product <- subset(catcar, idents = c("Early", "Mid", "Late"))
 ```
 
 
 ```{r}
-FeaturePlot_scCustom(catcar, features = c("IFNAR2"), split.by = "time_outcome", num_columns = 4)&
+p <- FeaturePlot_scCustom(no_product, features = c("HMOX1"), split.by = "time_outcome", num_columns = 2)&
     scale_colour_viridis(option = "F", direction = -1)&
     theme_void()&NoLegend()&
-    theme(plot.title = element_text(size = 12, face = "bold")
-    )
+    theme(plot.title = element_text(size = 12, face = "bold"))
+p
+ggsave(plot=p, filename = "HMOX1_featureplot_by_remission.png", dpi=300, height = 8, width = 4)
 ```
 
 ### now running specific contrasts (for example late vs rest) to get specific signature at a timepoint
