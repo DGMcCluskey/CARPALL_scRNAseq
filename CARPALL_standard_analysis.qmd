@@ -311,7 +311,7 @@ Proportion_Plot(carpall, group.by="celltypist_cleaned", split.by="Timepoint_bin"
 
 ### ANNOTATED SAVE/LOAD POINT (in a full analysis i'd have manually annotated, but here im just using celltypist as a guide for now)
 ```{r}
-saveRDS(carpall, file="CARPALL_annotated.rds", compress=F)
+#saveRDS(carpall, file="CARPALL_annotated.rds", compress=F)
 carpall <- readRDS(file="CARPALL_annotated.rds")
 ```
 

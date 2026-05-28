@@ -21,7 +21,6 @@ library(patchwork)
 library(ggsci)
 library(ggthemes)
 library(ggplot2)
-library(DoubletFinder)
 library(anndataR)
 library(cartography)
 library(DESeq2)
@@ -60,14 +59,32 @@ for (i in resolutions) {
 
 ### SAVE/LOAD POINT
 ```{r}
-saveRDS(catcar, file = "car_only_clustered.rds", compress = F)
+#saveRDS(catcar, file = "car_only_clustered.rds", compress = F)
 catcar <- readRDS("car_only_clustered.rds")
 ```
 
+### add remission information
+```{r}
+catcar$Remission <- NA
+
+catcar$Remission[catcar$Patient %in% c("P01","P02","P03","P05")] <- "Remission"
+catcar$Remission[catcar$Patient %in% c("P06","P08","P09","P10","P11","P13")] <- "Relapse"
+
+table(catcar$Remission)
+```
+
+### order some groups to make more sense
+```{r}
+catcar$Timepoint_bin <- factor(catcar$Timepoint_bin, levels = c("Product", "Early", "Mid", "Late"))
+```
 
 ### exploratory plots
 ```{r}
-DimPlot(catcar, group.by = c("Patient", "Timepoint_bin", "Source"), ncol=1)&scale_colour_npg()&theme_void()
+DimPlot(catcar, group.by = c("Patient", "Timepoint_bin", "Source", "Remission"))&scale_colour_npg()&theme_void()
+```
+
+```{r}
+FeaturePlot(catcar, features = c("CAT-scFv", "CD3D", "CD8A", "LYZ", "CD79A", "FOXP3", "TIGIT", "KLRB1", "GZMB"))&scale_colour_viridis(option = "F", direction = -1)
 ```
 
 ```{r}
@@ -121,7 +138,6 @@ bulk_catcar <- AddMetaData(
 )
 ```
 
-
 ### set up deseq dataset
 ```{r}
 counts <- GetAssayData(
@@ -147,6 +163,113 @@ sig_lrt <- subset(
     padj < 0.05
 )
 ```
+
+### im also going to put the overall deg list into a dotplot, then extract the data to get the percentage positive values
+### if a gene isn't expressed in at least 25% (subject to chnge) of cells in one timepoint, i'll exclude it as it's likely not that impactful
+### ill then the updated list forward
+```{r}
+all_degs <- rownames(sig_lrt)
+pct_exp <- DotPlot(catcar, features = all_degs, group.by = "Timepoint_bin")
+pct_exp <- pct_exp$data
+pct_exp <- pct_exp[, c(2,3,4)]
+pct_exp <- pivot_wider(pct_exp, names_from = "id", values_from = "pct.exp")
+#testing 10% to see how many that cuts
+degs_filtered <- pct_exp %>%
+    filter(if_any(-features.plot, ~ . >= 25))
+degs_filtered <- as.data.frame(degs_filtered)
+lrt_degs_filtered <- filter(sig_lrt, rownames(sig_lrt) %in% degs_filtered$features.plot)
+top50_lrt_degs <- lrt_degs_filtered %>% arrange(padj) %>% slice_head(n=50)
+```
+
+
+### using clustered_dotplot from the scustomise package
+```{r}
+p <- Clustered_DotPlot(
+    catcar,
+    features = rownames(top50_lrt_degs),
+    group.by = "Timepoint_bin",
+    k = 4,
+    plot_km_elbow = FALSE
+)
+
+png(
+    filename = "topdegs_clustered_dotplot.png",
+    width = 3000,
+    height = 4000,
+    res = 300
+)
+
+draw(p)
+
+dev.off()
+```
+
+### the major differences are between the product and all other timepoints, so i will also run deseq2 without thhe product cells, to specifically look for differences between early, mid and late
+```{r}
+Idents(bulk_catcar) <- "Timepoint_bin"
+no_product <- subset(bulk_catcar, idents = c("Early", "Mid", "Late"))
+counts <- GetAssayData(
+    no_product,
+    slot = "counts"
+)
+
+dds <- DESeqDataSetFromMatrix(
+    countData = counts,
+    colData = no_product@meta.data,
+    design = ~ Patient + Timepoint_bin
+)
+```
+
+```{r}
+dds <- DESeq(dds, test = "LRT", reduced = ~ Patient)
+res_lrt <- results(dds)
+res_lrt_df <- as.data.frame(res_lrt)
+sig_lrt <- subset(
+    res_lrt_df,
+    padj < 0.05
+)
+top50_lrt_degs <- sig_lrt %>% arrange(padj) %>% slice_head(n=50)
+```
+
+### again i will extract genes only present in a certain percentage of cells, as a number of them are very low
+```{r}
+all_degs <- rownames(sig_lrt)
+pct_exp <- DotPlot(catcar, features = all_degs, group.by = "Timepoint_bin")
+pct_exp <- pct_exp$data
+pct_exp <- pct_exp[, c(2,3,4)]
+pct_exp <- pivot_wider(pct_exp, names_from = "id", values_from = "pct.exp")
+#testing 10% to see how many that cuts
+degs_filtered <- pct_exp %>%
+    filter(if_any(-features.plot, ~ . >= 25))
+degs_filtered <- as.data.frame(degs_filtered)
+lrt_degs_filtered <- filter(sig_lrt, rownames(sig_lrt) %in% degs_filtered$features.plot)
+```
+
+```{r}
+catcar$Timepoint_bin <- factor(catcar$Timepoint_bin, levels = c("Product", "Early", "Mid", "Late"))
+Idents(catcar) <- "Timepoint_bin"
+p <- Clustered_DotPlot(
+    catcar,
+    features = rownames(lrt_degs_filtered),
+    group.by = "Timepoint_bin",
+    k = 5,
+    cluster_ident = F,
+    plot_km_elbow = F
+)
+
+png(
+    filename = "no_product_topdegs_clustered_dotplot.png",
+    width = 3000,
+    height = 4000,
+    res = 300
+)
+
+draw(p)
+
+dev.off()
+```
+
+
 
 ### now running specific contrasts (for example late vs rest) to get specific signature at a timepoint
 ### this suses the default wald test
