@@ -137,8 +137,34 @@ FeaturePlot(catcar, features = c("celltypist_low_score", "celltypist_high_score"
     scale_colour_viridis(option = "F", direction = -1)
 ```
 
+### want to remove the obvious myeloid cells, so subsetting based on resolution_0.5 and then re-clustering
+### whilst here will also filter out predicted doublets
+
 ```{r}
 DimPlot(catcar, group.by = c("resolution_0.5"))&
+    theme_void()&scale_colour_d3("category20")
+```
+
+### rename doublet groups and inspect
+```{r}
+catcar$scDblFinder.class <- factor(catcar$scDblFinder.class, levels = c("1", "2"), labels = c("singlet", "doublet"))
+table(catcar$scDblFinder.class)
+VlnPlot(catcar, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), group.by = "scDblFinder.class", pt.size = 0)
+```
+
+### remove cluter 11 (the myeloid population almost exclusively from patient 6)
+```{r}
+Idents(catcar) <- "resolution_0.5"
+catcar <- subset(catcar, idents = "11", invert = TRUE)
+DimPlot(catcar)&
+    theme_void()&scale_colour_d3("category20")
+```
+
+### remove doublets
+```{r}
+Idents(catcar) <- "scDblFinder.class"
+catcar <- subset(catcar, idents = "singlet")
+DimPlot(catcar)&
     theme_void()&scale_colour_d3("category20")
 ```
 
