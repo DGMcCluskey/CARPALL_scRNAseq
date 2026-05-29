@@ -65,31 +65,6 @@ for (i in resolutions) {
 catcar <- readRDS("car_only_clustered.rds")
 ```
 
-### some QC umaps of stress, apoptosis and cell cycle genes
-```{r}
-stress_genes <- c( "FOS",
-    "HSPA1A", "HSPA1B", "HSPB1")
-
-apoptosis_genes <- c("CASP3", "CASP6", "FAS", "MAP2K1")
-
-stress_plot <- FeaturePlot(catcar, features = stress_genes)&scale_colour_viridis(option = "F", direction = -1)&theme_void()&NoLegend()&
-    theme(
-        legend.text = element_text(size = 14),
-        legend.title = element_text(size = 16),
-        plot.title = element_text(size = 18, face = "bold")
-    )
-ggsave(plot=stress_plot, file="catcar_stress_genes.png", dpi = 300, height = 6, width = 6)
-
-apoptosis_plot <- FeaturePlot(catcar, features = apoptosis_genes)&scale_colour_viridis(option = "F", direction = -1)&theme_void()&NoLegend()&
-    theme(
-        legend.text = element_text(size = 14),
-        legend.title = element_text(size = 16),
-        plot.title = element_text(size = 18, face = "bold")
-    )
-ggsave(plot=apoptosis_plot, file="catcar_apoptosis_genes.png", dpi = 300, height = 6, width = 6)
-```
-
-
 ### add remission information
 ```{r}
 catcar$Remission <- NA
@@ -193,6 +168,30 @@ for (i in resolutions) {
 catcar <- readRDS("car_only_2nd_clustering.rds")
 ```
 
+### some QC umaps of stress, apoptosis and cell cycle genes
+```{r}
+stress_genes <- c( "FOS",
+    "HSPA1A", "HSPA1B", "HSPB1")
+
+apoptosis_genes <- c("CASP3", "CASP6", "FAS", "MAP2K1")
+
+stress_plot <- FeaturePlot(catcar, features = stress_genes)&scale_colour_viridis(option = "F", direction = -1)&theme_void()&NoLegend()&
+    theme(
+        legend.text = element_text(size = 14),
+        legend.title = element_text(size = 16),
+        plot.title = element_text(size = 18, face = "bold")
+    )
+ggsave(plot=stress_plot, file="catcar_stress_genes.png", dpi = 300, height = 6, width = 6)
+
+apoptosis_plot <- FeaturePlot(catcar, features = apoptosis_genes)&scale_colour_viridis(option = "F", direction = -1)&theme_void()&NoLegend()&
+    theme(
+        legend.text = element_text(size = 14),
+        legend.title = element_text(size = 16),
+        plot.title = element_text(size = 18, face = "bold")
+    )
+ggsave(plot=apoptosis_plot, file="catcar_apoptosis_genes.png", dpi = 300, height = 6, width = 6)
+```
+
 ### exploratory plots
 ```{r}
 p <-DimPlot(catcar, group.by = c("Patient", "Timepoint_bin", "Source", "Remission"))&scale_colour_npg()&
@@ -205,6 +204,25 @@ p <-DimPlot(catcar, group.by = c("Patient", "Timepoint_bin", "Source", "Remissio
     )
 p
 ggsave(plot=p, filename="car_only_umap_metadata.png", dpi=300, height = 10, width = 12, bg="white")
+```
+
+```{r}
+p <- FeaturePlot(catcar, features = c("CAT-scFv", "CD3D", "CD8A", "CD4", "LYZ", "CD79A", "NKG7", "NCAM1", "GZMB"))&scale_colour_viridis(option = "F", direction = -1)&theme_void()&NoLegend()&
+    theme(
+        legend.text = element_text(size = 14),
+        legend.title = element_text(size = 16),
+        plot.title = element_text(size = 18, face = "bold")
+    )
+p
+ggsave(plot=p, filename = "car_only_key_marker_featureplot.png", dpi=300,height=10,width=12)
+```
+
+### want to remove the obvious myeloid cells, so subsetting based on resolution_0.5 and then re-clustering
+### whilst here will also filter out predicted doublets
+
+```{r}
+DimPlot(catcar, group.by = c("resolution_0.5"))&
+    theme_void()&scale_colour_d3("category20")
 ```
 
 ```{r}
@@ -255,6 +273,14 @@ p <- Proportion_Plot(catcar, group.by="celltypist_cleaned", split.by="time_outco
 p
 ggsave(plot=p, filename = "catcar_celltypist_cleaned_proportions_by_time_outcome.png", dpi=300, height = 6, width = 8)
 ```
+
+### proportions by patient
+```{r}
+p <- Proportion_Plot(catcar, group.by="celltypist_cleaned", split.by="Patient")+scale_fill_manual(values = cols)
+p
+ggsave(plot=p, filename = "catcar_celltypist_cleaned_proportions_by_patient.png", dpi=300, height = 6, width = 8)
+```
+
 
 ### PSEUDOBULK DIFFERENTIAL EXPRESSION ANALYSIS
 ### comparing timepoints of product first
@@ -338,7 +364,7 @@ p <- Clustered_DotPlot(
 )
 
 png(
-    filename = "topdegs_clustered_dotplot.png",
+    filename = "LRT_topdegs_clustered_dotplot.png",
     width = 1200,
     height = 2000,
     res = 300
