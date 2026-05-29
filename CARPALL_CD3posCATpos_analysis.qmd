@@ -168,6 +168,31 @@ DimPlot(catcar)&
     theme_void()&scale_colour_d3("category20")
 ```
 
+### 2nd ROUND OF CLUSTERING
+```{r}
+catcar <- NormalizeData(catcar)
+catcar <- FindVariableFeatures(catcar)
+catcar <- ScaleData(catcar, vars.to.regress = c("nCount_RNA", "percent.mt"))
+catcar <- RunPCA(catcar)
+ElbowPlot(catcar)
+catcar <- RunHarmony(catcar, group.by.vars = c("Patient"))
+```
+
+```{r}
+catcar <- FindNeighbors(catcar, dims = 1:12, reduction = "harmony")
+catcar <- RunUMAP(catcar, dims = 1:12, reduction = "harmony", seed.use =61)
+resolutions <- c(0.5,0.7, 1)
+for (i in resolutions) {
+    catcar <- FindClusters(catcar, resolution = i, cluster.name = paste0("resolution_",i))
+}
+```
+
+### SAVE/LOAD POINT
+```{r}
+#saveRDS(catcar, file = "car_only_2nd_clustering.rds", compress = F)
+catcar <- readRDS("car_only_2nd_clustering.rds")
+```
+
 
 ### clean up detailed celltypist labels to bin rare populations into "other"
 ### any population less than 1% of cells (1860 cells) is labelled as other
