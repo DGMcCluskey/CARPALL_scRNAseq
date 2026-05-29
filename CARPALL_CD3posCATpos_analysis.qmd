@@ -193,6 +193,23 @@ for (i in resolutions) {
 catcar <- readRDS("car_only_2nd_clustering.rds")
 ```
 
+### exploratory plots
+```{r}
+p <-DimPlot(catcar, group.by = c("Patient", "Timepoint_bin", "Source", "Remission"))&scale_colour_npg()&
+    theme_void() &
+    guides(color = guide_legend(override.aes = list(size = 6))) &
+    theme(
+        legend.text = element_text(size = 14),
+        legend.title = element_text(size = 16),
+        plot.title = element_text(size = 18, face = "bold")
+    )
+p
+ggsave(plot=p, filename="car_only_umap_metadata.png", dpi=300, height = 10, width = 12, bg="white")
+```
+
+```{r}
+Proportion_Plot(catcar, group.by = "Timepoint_bin", split.by = "Remission")+scale_fill_npg()
+```
 
 ### clean up detailed celltypist labels to bin rare populations into "other"
 ### any population less than 1% of cells (1860 cells) is labelled as other
