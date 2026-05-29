@@ -65,6 +65,31 @@ for (i in resolutions) {
 catcar <- readRDS("car_only_clustered.rds")
 ```
 
+### some QC umaps of stress, apoptosis and cell cycle genes
+```{r}
+stress_genes <- c( "FOS",
+    "HSPA1A", "HSPA1B", "HSPB1")
+
+apoptosis_genes <- c("CASP3", "CASP6", "FAS", "MAP2K1")
+
+stress_plot <- FeaturePlot(catcar, features = stress_genes)&scale_colour_viridis(option = "F", direction = -1)&theme_void()&NoLegend()&
+    theme(
+        legend.text = element_text(size = 14),
+        legend.title = element_text(size = 16),
+        plot.title = element_text(size = 18, face = "bold")
+    )
+ggsave(plot=stress_plot, file="catcar_stress_genes.png", dpi = 300, height = 6, width = 6)
+
+apoptosis_plot <- FeaturePlot(catcar, features = apoptosis_genes)&scale_colour_viridis(option = "F", direction = -1)&theme_void()&NoLegend()&
+    theme(
+        legend.text = element_text(size = 14),
+        legend.title = element_text(size = 16),
+        plot.title = element_text(size = 18, face = "bold")
+    )
+ggsave(plot=apoptosis_plot, file="catcar_apoptosis_genes.png", dpi = 300, height = 6, width = 6)
+```
+
+
 ### add remission information
 ```{r}
 catcar$Remission <- NA
@@ -95,7 +120,7 @@ ggsave(plot=p, filename="car_only_umap_metadata.png", dpi=300, height = 10, widt
 ```
 
 ```{r}
-p <- FeaturePlot(catcar, features = c("CAT-scFv", "CD3D", "CD8A", "LYZ", "CD79A", "FOXP3", "TIGIT", "KLRB1", "GZMB"))&scale_colour_viridis(option = "F", direction = -1)&theme_void()&NoLegend()&
+p <- FeaturePlot(catcar, features = c("CAT-scFv", "CD3D", "CD8A", "CD4", "LYZ", "CD79A", "NKG7", "NCAM1", "GZMB"))&scale_colour_viridis(option = "F", direction = -1)&theme_void()&NoLegend()&
     theme(
         legend.text = element_text(size = 14),
         legend.title = element_text(size = 16),
@@ -111,6 +136,12 @@ FeaturePlot(catcar, features = c("celltypist_low_score", "celltypist_high_score"
     theme_void()&
     scale_colour_viridis(option = "F", direction = -1)
 ```
+
+```{r}
+DimPlot(catcar, group.by = c("resolution_0.5"))&
+    theme_void()&scale_colour_d3("category20")
+```
+
 
 ### clean up detailed celltypist labels to bin rare populations into "other"
 ### any population less than 1% of cells (1860 cells) is labelled as other
@@ -150,6 +181,12 @@ p
 ggsave(plot=p, filename = "catcar_celltypist_cleaned_proportions_by_time.png", dpi=300, height = 6, width = 6)
 ```
 
+### proportions by outcome
+```{r}
+p <- Proportion_Plot(catcar, group.by="celltypist_cleaned", split.by="time_outcome")+scale_fill_manual(values = cols)
+p
+ggsave(plot=p, filename = "catcar_celltypist_cleaned_proportions_by_time_outcome.png", dpi=300, height = 6, width = 8)
+```
 
 ### PSEUDOBULK DIFFERENTIAL EXPRESSION ANALYSIS
 ### comparing timepoints of product first
@@ -405,4 +442,93 @@ sig_late_vs_early <- filter(res_late_vs_early, padj < 0.05)
 ### GSEA
 ```{r}
 res_late_vs_early <- res_late_vs_early[!is.na(res_late_vs_early$stat), ]
+gene_list <- res_late_vs_early$stat
+names(gene_list) <- rownames(res_late_vs_early)
+gene_list <- sort(gene_list, decreasing = T)
+```
+
+```{r}
+library(BiocParallel)
+register(SerialParam())
+```
+
+```{r}
+go_res <- gseGO(
+    geneList = gene_list,
+    OrgDb = org.Hs.eg.db,
+    keyType = "SYMBOL",
+    ont = "BP",
+    minGSSize = 10,
+    maxGSSize = 500,
+    pvalueCutoff = 0.05,
+    verbose = TRUE
+)
+
+go_res <- simplify(
+  gsea_res,
+  cutoff = 0.7,
+  by = "p.adjust",
+  select_fun = min,
+  measure = "Wang",
+  semData = NULL
+)
+```
+
+```{r}
+go_df <- as.data.frame(go_res)
+```
+
+```{r}
+dotplot(go_res, showCategory=10, split=".sign") + facet_grid(.~.sign)
+```
+
+```{r}
+# Create dataframe from ranked vector
+gene_df <- data.frame(
+    SYMBOL = names(gene_list),
+    stat = gene_list
+)
+
+# Convert symbols to Entrez IDs
+gene_conv <- bitr(
+    gene_df$SYMBOL,
+    fromType = "SYMBOL",
+    toType = "ENTREZID",
+    OrgDb = org.Hs.eg.db
+)
+
+# Merge back with statistics
+gene_df <- merge(
+    gene_df,
+    gene_conv,
+    by = "SYMBOL"
+)
+
+# Remove duplicated Entrez IDs
+gene_df <- gene_df[!duplicated(gene_df$ENTREZID), ]
+
+# Create ranked vector for KEGG
+kegg_gene_list <- gene_df$stat
+names(kegg_gene_list) <- gene_df$ENTREZID
+
+# Sort decreasing
+kegg_gene_list <- sort(kegg_gene_list, decreasing = TRUE)
+```
+
+```{r}
+kegg_res <- gseKEGG(geneList = kegg_gene_list, organism = "hsa")
+kegg_df <- as.data.frame(kegg_res)
+```
+
+```{r}
+dotplot(kegg_res, showCategory=10, split=".sign") + facet_grid(.~.sign)
+```
+
+```{r}
+top_bottom_df <- kegg_df %>%
+    arrange(desc(NES)) %>%
+    slice(c(1:10, (n() - 9):n()))
+```
+```{r}
+ggplot(top_bottom_df, aes(x= NES, y = reorder(Description, NES)))+geom_col()+theme_bw()
 ```
