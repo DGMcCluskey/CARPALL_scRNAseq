@@ -27,6 +27,7 @@ library(DESeq2)
 library(clusterProfiler)
 library(org.Hs.eg.db)
 library(ReactomePA)
+library(enrichplot)
 ```
 
 ```{r}
@@ -650,10 +651,41 @@ ggplot(top_bottom_df, aes(x= NES, y = reorder(Description, NES)))+geom_col()+the
 ```
 
 ### REACTOME
+### use kegg list (entrez id rather than synbol) as input
 ```{r}
-reactome_res <- gsePathway(geneList, 
+reactome_res <- gsePathway(kegg_gene_list, 
                 pvalueCutoff = 0.05,
                 pAdjustMethod = "BH", 
                 verbose = T)
 reactome_df <- as.data.frame(reactome_res)
+```
+
+```{r}
+reactome_res_readable <- setReadable(
+    reactome_res,
+    OrgDb = org.Hs.eg.db,
+    keyType = "ENTREZID"
+)
+reactome_df <- as.data.frame(reactome_res_readable)
+```
+
+```{r}
+dotplot(reactome_res, showCategory=10, split=".sign") + facet_grid(.~.sign)
+```
+
+```{r}
+viewPathway("Regulation of endogenous retroelements by KRAB-ZFP proteins", 
+            readable = TRUE, 
+            foldChange = kegg_gene_list)
+```
+
+```{r}
+reactome_res$Description
+```
+```{r}
+gseaplot2(reactome_res, geneSetID = 18, title = reactome_res$Description[18])
+```
+
+```{r}
+
 ```
