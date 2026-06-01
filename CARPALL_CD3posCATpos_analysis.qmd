@@ -660,6 +660,7 @@ reactome_res <- gsePathway(kegg_gene_list,
 reactome_df <- as.data.frame(reactome_res)
 ```
 
+### get version with gene names
 ```{r}
 reactome_res_readable <- setReadable(
     reactome_res,
@@ -669,6 +670,7 @@ reactome_res_readable <- setReadable(
 reactome_df <- as.data.frame(reactome_res_readable)
 ```
 
+### do some plotting
 ```{r}
 dotplot(reactome_res, showCategory=10, split=".sign") + facet_grid(.~.sign)
 ```
@@ -686,6 +688,19 @@ reactome_res$Description
 gseaplot2(reactome_res, geneSetID = 18, title = reactome_res$Description[18])
 ```
 
+### get the genes that contribute to the KRAB-ZFP pathway
+### filter on whether they are major contributors
 ```{r}
+rank_table <- gsearank(reactome_res_readable, 18, output = "table")
+major_table <- filter(rank_table, `core enrichment` == "YES")
+krab_zfp_genes <- major_table$gene
+```
 
+### plot these genes in the seurat object
+```{r}
+DotPlot(catcar, features = krab_zfp_genes, group.by = "Timepoint_bin", scale.by = "size")+scale_colour_viridis(option = "plasma")+coord_flip()
+```
+
+```{r}
+DotPlot(catcar, features = krab_zfp_genes, group.by = "time_outcome", scale.by = "size")+scale_colour_viridis(option = "plasma")+coord_flip()
 ```
