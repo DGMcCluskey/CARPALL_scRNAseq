@@ -196,7 +196,8 @@ ggsave(plot=apoptosis_plot, file="catcar_apoptosis_genes.png", dpi = 300, height
 
 ### exploratory plots
 ```{r}
-p <-DimPlot(catcar, group.by = c("Patient", "Timepoint_bin", "Source", "Remission"))&scale_colour_npg()&
+p <-DimPlot(catcar, group.by = c("Patient", "Timepoint_bin", "Source", "Remission"))&
+    scale_colour_d3("category20")&
     theme_void() &
     guides(color = guide_legend(override.aes = list(size = 6))) &
     theme(
@@ -205,7 +206,7 @@ p <-DimPlot(catcar, group.by = c("Patient", "Timepoint_bin", "Source", "Remissio
         plot.title = element_text(size = 18, face = "bold")
     )
 p
-ggsave(plot=p, filename="car_only_umap_metadata.png", dpi=300, height = 10, width = 12, bg="white")
+ggsave(plot=p, filename="car_only_umap_metadata.png", dpi=300, height = 10, width = 15, bg="white")
 ```
 
 ```{r}
@@ -222,6 +223,28 @@ ggsave(plot=p, filename = "car_only_key_marker_featureplot.png", dpi=300,height=
 ```{r}
 DimPlot(catcar, group.by = c("resolution_0.5"))&
     theme_void()&scale_colour_d3("category20")
+```
+
+### PROPORTIONS ANALYSIS
+```{r}
+cluster_props <- catcar@meta.data %>%
+  group_by(Patient, Remission, Timepoint_bin, celltypist_cleaned) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(Patient, Remission, Timepoint_bin) %>%
+  mutate(proportion = (n / sum(n))*100) %>%
+  ungroup()
+```
+
+```{r}
+cluster_props <- filter(cluster_props, Timepoint_bin %in% c("Early", "Mid", "Late"))
+```
+
+```{r}
+ggplot(cluster_props, aes(x = Timepoint_bin, y = proportion, colour = Remission))+
+    facet_wrap(~celltypist_cleaned, scales = "free_y")+
+    geom_boxplot(outlier.shape = NA)+
+    geom_point(position = position_dodge(width=0.8))+
+    theme_bw()+scale_colour_d3("category20")
 ```
 
 
@@ -698,9 +721,26 @@ krab_zfp_genes <- major_table$gene
 
 ### plot these genes in the seurat object
 ```{r}
-DotPlot(catcar, features = krab_zfp_genes, group.by = "Timepoint_bin", scale.by = "size")+scale_colour_viridis(option = "plasma")+coord_flip()
+DotPlot(catcar, features = krab_zfp_genes, group.by = "Timepoint_bin", scale.by = "size")+scale_colour_viridis(option = "rocket")+coord_flip()
 ```
 
 ```{r}
-DotPlot(catcar, features = krab_zfp_genes, group.by = "time_outcome", scale.by = "size")+scale_colour_viridis(option = "plasma")+coord_flip()
+DotPlot(catcar, features = krab_zfp_genes, group.by = "time_outcome", scale.by = "size")+scale_colour_viridis(option = "rocket")+coord_flip()
+```
+
+### OVCER-ENRICHMENT ANALYSIS
+### get up and down degs only from the dataframe used for the volcano
+```{r}
+up_late <- filter(res_late_vs_early, group %in% "Increased_late")
+up_late <- rownames(up_late)
+
+
+go_enrich <- enrichGO(gene = up_late,
+                      universe = names(rownames(res_late_vs_early)),
+                      OrgDb = org.Hs.eg.db,
+                      keyType = 'SYMBOL',
+                      ont = "BP",
+                      pvalueCutoff = 0.05, 
+                      qvalueCutoff = 0.10)
+go_enrich <- as.data.frame(go_enrich)
 ```
