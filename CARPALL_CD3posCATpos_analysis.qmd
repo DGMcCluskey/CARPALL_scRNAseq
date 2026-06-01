@@ -217,17 +217,11 @@ p
 ggsave(plot=p, filename = "car_only_key_marker_featureplot.png", dpi=300,height=10,width=12)
 ```
 
-### want to remove the obvious myeloid cells, so subsetting based on resolution_0.5 and then re-clustering
-### whilst here will also filter out predicted doublets
-
 ```{r}
 DimPlot(catcar, group.by = c("resolution_0.5"))&
     theme_void()&scale_colour_d3("category20")
 ```
 
-```{r}
-Proportion_Plot(catcar, group.by = "Timepoint_bin", split.by = "Remission")+scale_fill_npg()
-```
 
 ### clean up detailed celltypist labels to bin rare populations into "other"
 ### any population less than 1% of cells (1860 cells) is labelled as other
@@ -414,6 +408,7 @@ degs_filtered <- pct_exp %>%
     filter(if_any(-features.plot, ~ . >= 25))
 degs_filtered <- as.data.frame(degs_filtered)
 lrt_degs_filtered <- filter(sig_lrt, rownames(sig_lrt) %in% degs_filtered$features.plot)
+top25_lrt_degs <- lrt_degs_filtered %>% arrange(padj) %>% slice_head(n=25)
 ```
 
 ```{r}
@@ -421,7 +416,7 @@ catcar$Timepoint_bin <- factor(catcar$Timepoint_bin, levels = c("Product", "Earl
 Idents(catcar) <- "Timepoint_bin"
 p <- Clustered_DotPlot(
     catcar,
-    features = rownames(lrt_degs_filtered),
+    features = rownames(top25_lrt_degs),
     group.by = "Timepoint_bin",
     k = 5,
     column_label_size = 10,
@@ -533,6 +528,21 @@ res_late_vs_early <- as.data.frame(results(
 sig_late_vs_early <- filter(res_late_vs_early, padj < 0.05)
 ```
 
+```{r}
+res_late_vs_early$group <- ifelse(res_late_vs_early$log2FoldChange > 0 & res_late_vs_early$pad < 0.05, "Increased_late", ifelse(
+    res_late_vs_early$log2FoldChange < 0 & res_late_vs_early$pad < 0.05, "Increased_early", "Non_significant"))
+```
+
+```{r}
+res_late_vs_early <- res_late_vs_early %>% filter(!is.na(padj))
+```
+
+```{r}
+p <- ggplot(res_late_vs_early, aes(x = log2FoldChange, y = -log10(padj), colour = group))+geom_point()+theme_bw()+geom_hline(yintercept = -log10(0.05), linetype = "dashed", colour = "black")+scale_colour_manual(values = c("forestgreen", "orange", "grey50"))
+p
+ggsave(plot = p, filename = "volcano_plot_late_vs_early.png", dpi = 300, height = 5, width = 6)
+```
+
 ### GSEA
 ```{r}
 res_late_vs_early <- res_late_vs_early[!is.na(res_late_vs_early$stat), ]
@@ -559,7 +569,7 @@ go_res <- gseGO(
 )
 
 go_res <- simplify(
-  gsea_res,
+  go_res,
   cutoff = 0.7,
   by = "p.adjust",
   select_fun = min,
@@ -574,6 +584,15 @@ go_df <- as.data.frame(go_res)
 
 ```{r}
 dotplot(go_res, showCategory=10, split=".sign") + facet_grid(.~.sign)
+```
+
+```{r}
+top_bottom_df <- go_df %>%
+    arrange(desc(NES)) %>%
+    slice(c(1:10, (n() - 9):n()))
+```
+```{r}
+ggplot(top_bottom_df, aes(x= NES, y = reorder(Description, NES)))+geom_col()+theme_bw()
 ```
 
 ```{r}
