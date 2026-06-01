@@ -300,6 +300,22 @@ p
 ggsave(plot=p, filename = "catcar_celltypist_cleaned_proportions_by_patient.png", dpi=300, height = 6, width = 8)
 ```
 
+### CLUSTERING AND ANNOTATION
+```{r}
+p <- DimPlot(catcar, group.by = "resolution_0.5")+scale_colour_d3("category20")
+p
+ggsave(plot = p, filename = "catcar_resolution_0.5.png", dpi=300, height = 4, width = 6)
+```
+
+```{r}
+DotPlot(catcar, group.by = "resolution_0.5", features = c("CD8A", "CD4", "CCR7", "SELL", "IL7R", "LRRN3", "TCF7", "LEF1", "GZMB", "GZMK", "GZMH", "LTB", "CD27", "CD28", "FOXP3", "TIGIT"))+scale_colour_viridis(option = "rocket", direction = -1)
+```
+
+```{r}
+clusters <- c("0" = "")
+Idents(catcar) <- "resolution_0.5"
+
+```
 
 ### PSEUDOBULK DIFFERENTIAL EXPRESSION ANALYSIS
 ### comparing timepoints of product first
@@ -728,7 +744,7 @@ DotPlot(catcar, features = krab_zfp_genes, group.by = "Timepoint_bin", scale.by 
 DotPlot(catcar, features = krab_zfp_genes, group.by = "time_outcome", scale.by = "size")+scale_colour_viridis(option = "rocket")+coord_flip()
 ```
 
-### OVCER-ENRICHMENT ANALYSIS
+### OVER-ENRICHMENT ANALYSIS
 ### get up and down degs only from the dataframe used for the volcano
 ```{r}
 up_late <- filter(res_late_vs_early, group %in% "Increased_late")
