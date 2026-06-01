@@ -26,6 +26,7 @@ library(cartography)
 library(DESeq2)
 library(clusterProfiler)
 library(org.Hs.eg.db)
+library(ReactomePA)
 ```
 
 ```{r}
@@ -556,6 +557,7 @@ library(BiocParallel)
 register(SerialParam())
 ```
 
+### GO
 ```{r}
 go_res <- gseGO(
     geneList = gene_list,
@@ -595,6 +597,7 @@ top_bottom_df <- go_df %>%
 ggplot(top_bottom_df, aes(x= NES, y = reorder(Description, NES)))+geom_col()+theme_bw()
 ```
 
+### KEGG
 ```{r}
 # Create dataframe from ranked vector
 gene_df <- data.frame(
@@ -644,4 +647,13 @@ top_bottom_df <- kegg_df %>%
 ```
 ```{r}
 ggplot(top_bottom_df, aes(x= NES, y = reorder(Description, NES)))+geom_col()+theme_bw()
+```
+
+### REACTOME
+```{r}
+reactome_res <- gsePathway(geneList, 
+                pvalueCutoff = 0.05,
+                pAdjustMethod = "BH", 
+                verbose = T)
+reactome_df <- as.data.frame(reactome_res)
 ```
