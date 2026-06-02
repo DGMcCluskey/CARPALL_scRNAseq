@@ -643,7 +643,10 @@ go_df <- as.data.frame(go_res)
 ```
 
 ```{r}
-dotplot(go_res, showCategory=10, split=".sign") + facet_grid(.~.sign)
+p <- dotplot(go_res, showCategory=10, split=".sign") + facet_grid(.~.sign)+
+    scale_fill_distiller(palette = "Reds", direction = -1)
+p
+ggsave(plot = p, filename = "late_vs_early_go_gsea_dotplot.png", dpi = 300, height = 7, width = 9)
 ```
 
 ```{r}
@@ -652,7 +655,7 @@ top_bottom_df <- go_df %>%
     slice(c(1:10, (n() - 9):n()))
 ```
 ```{r}
-ggplot(top_bottom_df, aes(x= NES, y = reorder(Description, NES)))+geom_col()+theme_bw()
+ggplot(top_bottom_df, aes(x= NES, y = reorder(Description, NES), fill = p.adjust))+geom_col()+theme_bw()
 ```
 
 ### KEGG
@@ -729,20 +732,18 @@ reactome_df <- as.data.frame(reactome_res_readable)
 
 ### do some plotting
 ```{r}
-dotplot(reactome_res, showCategory=10, split=".sign") + facet_grid(.~.sign)
+p <- dotplot(reactome_res, showCategory=10, split=".sign") + facet_grid(.~.sign)+
+    scale_fill_distiller(palette = "Reds", direction = -1)
+p
+ggsave(plot = p, filename = "late_vs_early_reactome_gsea_dotplot.png", dpi = 300, height = 7, width = 9)
 ```
-
-```{r}
-viewPathway("Regulation of endogenous retroelements by KRAB-ZFP proteins", 
-            readable = TRUE, 
-            foldChange = kegg_gene_list)
-```
-
 ```{r}
 reactome_res$Description
 ```
 ```{r}
-gseaplot2(reactome_res, geneSetID = 18, title = reactome_res$Description[18])
+p <- gseaplot2(reactome_res, geneSetID = 25, title = reactome_res$Description[25])
+p
+ggsave(plot = p, filename = "KRAB_ZFP_enrichment_plot.png", dpi = 300, height = 3, width = 6)
 ```
 
 ### get the genes that contribute to the KRAB-ZFP pathway
