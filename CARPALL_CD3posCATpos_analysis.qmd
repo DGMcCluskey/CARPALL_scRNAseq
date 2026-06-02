@@ -475,7 +475,7 @@ pct_exp <- pct_exp[, c(2,3,4)]
 pct_exp <- pivot_wider(pct_exp, names_from = "id", values_from = "pct.exp")
 #testing 10% to see how many that cuts
 degs_filtered <- pct_exp %>%
-    filter(if_any(-features.plot, ~ . >= 25))
+    filter(if_any(-features.plot, ~ . >= 20))
 degs_filtered <- as.data.frame(degs_filtered)
 lrt_degs_filtered <- filter(sig_lrt, rownames(sig_lrt) %in% degs_filtered$features.plot)
 top25_lrt_degs <- lrt_degs_filtered %>% arrange(padj) %>% slice_head(n=25)
@@ -507,35 +507,8 @@ draw(p)
 dev.off()
 ```
 
-### based off of DEGs I'll inspect some specific ones to see if they differ based on remission status
 
-```{r}
-catcar$time_outcome <- paste0(catcar$Timepoint_bin, "_", catcar$Remission)
-catcar$time_outcome <- factor(catcar$time_outcome, levels = c("Early_Relapse", "Early_Remission", "Mid_Relapse", "Mid_Remission", "Late_Relapse", "Late_Remission", "Product_Remission"))
-Idents(catcar) <- "Timepoint_bin"
-no_product <- subset(catcar, idents = c("Early", "Mid", "Late"))
-```
-
-
-```{r}
-p <- FeaturePlot_scCustom(no_product, features = c("HMOX1"), split.by = "time_outcome", num_columns = 2)&
-    scale_colour_viridis(option = "F", direction = -1)&
-    theme_void()&NoLegend()&
-    theme(plot.title = element_text(size = 12, face = "bold"))
-p
-ggsave(plot=p, filename = "HMOX1_featureplot_by_remission.png", dpi=300, height = 8, width = 4)
-```
-
-```{r}
-VlnPlot(no_product, features= "HMOX1", group.by = "time_outcome", pt.size = 0)
-```
-
-```{r}
-DotPlot(no_product, features = c("IFNAR2", "HMOX1"), group.by = "time_outcome")+scale_colour_viridis(option = "plasma", direction = -1)+coord_flip()
-```
-
-
-### run GSEA on 38 genes
+### run GSEA on thye no_product LRT degs
 
 ```{r}
 genes <- rownames(lrt_degs_filtered)
@@ -605,10 +578,26 @@ res_late_vs_early$group <- ifelse(res_late_vs_early$log2FoldChange > 0 & res_lat
 
 ```{r}
 res_late_vs_early <- res_late_vs_early %>% filter(!is.na(padj))
+res_late_vs_early$gene <- rownames(res_late_vs_early)
+```
+
+### get top and bottom genes for labelling
+```{r}
+top_late <- res_late_vs_early %>%
+  slice_max(stat, n = 10)
+
+top_early <- res_late_vs_early %>%
+  slice_min(stat, n = 10)
+
+label_genes <- bind_rows(top_late, top_early)
 ```
 
 ```{r}
-p <- ggplot(res_late_vs_early, aes(x = log2FoldChange, y = -log10(padj), colour = group))+geom_point()+theme_bw()+geom_hline(yintercept = -log10(0.05), linetype = "dashed", colour = "black")+scale_colour_manual(values = c("forestgreen", "orange", "grey50"))
+p <- ggplot(res_late_vs_early, aes(x = log2FoldChange, y = -log10(padj), colour = group))+
+    geom_point()+theme_bw()+
+    geom_hline(yintercept = -log10(0.05), linetype = "dashed", colour = "black")+
+    scale_colour_manual(values = c("forestgreen", "orange", "grey50"))+
+    geom_text_repel(data = label_genes,aes(label = gene),size = 3)
 p
 ggsave(plot = p, filename = "volcano_plot_late_vs_early.png", dpi = 300, height = 5, width = 6)
 ```
