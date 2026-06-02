@@ -322,14 +322,15 @@ DotPlot(catcar, group.by = "resolution_0.5", features = c("CD8A", "CD4", "CCR7",
 ```{r}
 p <- Proportion_Plot(catcar, group.by = "resolution_0.5")+scale_fill_d3("category20")
 p
-ggsave(plot=p, filename = "resolution_0.5_proportions.png", dpi = 300, height = 5, width = 2)
+ggsave(plot=p, filename = "resolution_0.5_proportions.png", dpi = 300, height = 5, width = 5)
 ```
 
 ```{r}
-clusters <- c("0" = "c0", "1" = "c1", "2" = "c2", "3" = "c3", "4" = "c0", "5" = "c5", "6" = "c1", "7" = "c7", "8" = "c0", "9" = "c1", "10" = "c0", "11" = "c0")
+clusters <- c("0" = "c0", "1" = "c1", "2" = "c2", "3" = "c3", "4" = "c0", "5" = "c4", "6" = "c1", "7" = "c5", "8" = "c0", "9" = "c1", "10" = "c0", "11" = "c0", "12" = "c1")
 Idents(catcar) <- "resolution_0.5"
 catcar <- RenameIdents(catcar, clusters)
-catcar <- StashIdent(catcar, name = "Basic_clusters")
+catcar@active.ident
+catcar[["basic_clusters"]] <- catcar@active.ident
 ```
 
 # SAVE/LOAD POINT
@@ -338,6 +339,12 @@ catcar <- StashIdent(catcar, name = "Basic_clusters")
 catcar <- readRDS("car_only_2nd_clustering.rds")
 ```
 
+```{r}
+p <- DimPlot(catcar, group.by = "basic_clusters", label = T, label.box = T, label.size = 6)+
+    scale_colour_d3("category20")+scale_fill_d3("category20")
+p
+ggsave(plot = p, filename = "catcar_basic_labels.png", dpi=300, height = 6, width = 8)
+```
 
 ### PSEUDOBULK DIFFERENTIAL EXPRESSION ANALYSIS
 ### comparing timepoints of product first
