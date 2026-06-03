@@ -30,35 +30,52 @@ library(ReactomePA)
 library(enrichplot)
 ```
 
+
+### load in extract car cells
 ```{r}
 catcar <- readRDS("CARPALL_CD3posCATpos.rds")
+```
+
+
+### check QC stats to see if any further filtering required
+```{r}
+catcar[["percent.mt"]] <- PercentageFeatureSet(catcar, pattern = "^MT-")
+catcar[["percent.ribo"]] <- PercentageFeatureSet(catcar, pattern = "^RP[SL]")
+
+p <- VlnPlot(catcar, features = c("nFeature_RNA", "nCount_RNA", "percent.mt", "percent.ribo"), 
+group.by = "Patient", ncol = 2, pt.size = 0)&
+    scale_fill_d3("category20")
+p
+ggsave(plot = p, filename = "catcar_filtering_plots.png", dpi = 300, height = 6, width = 6)
+```
+
+### going to be stricter than whole dataset filtering and only keep cells with <15% mito and also filter for ribo
+```{r}
+catcar <- subset(catcar, subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & percent.mt < 15 & percent.ribo < 20)
 ```
 
 ### run processing pipeline again
 ```{r}
 catcar <- NormalizeData(catcar)
 catcar <- FindVariableFeatures(catcar)
-catcar <- ScaleData(catcar, vars.to.regress = c("nCount_RNA", "percent.mt"))
+catcar <- ScaleData(catcar, vars.to.regress = c("nCount_RNA", "percent.mt", "percent.ribo"))
 catcar <- RunPCA(catcar)
 ElbowPlot(catcar)
 ```
 
 
 ### batch correction using harmony
-### i'm going to use patient as the batch key as a reasonable stop-gap until i know the true batches
+### i'm going to use patient as the batch key, if anything this will over-correct but is the safe option
 
 ```{r}
 catcar <- RunHarmony(catcar, group.by.vars = c("Patient"))
 ```
 
-### run clustering and embedding
+### create embedding
+### no clustering required yet as 2nd round of embeding likely needed
 ```{r}
-catcar <- FindNeighbors(catcar, dims = 1:12, reduction = "harmony")
-catcar <- RunUMAP(catcar, dims = 1:12, reduction = "harmony", seed.use =61)
-resolutions <- c(0.5,0.6,0.7,0.8,0.9,1)
-for (i in resolutions) {
-    catcar <- FindClusters(catcar, resolution = i, cluster.name = paste0("resolution_",i))
-}
+catcar <- FindNeighbors(catcar, dims = 1:10, reduction = "harmony")
+catcar <- RunUMAP(catcar, dims = 1:10, reduction = "harmony", seed.use =61)
 ```
 
 ### SAVE/LOAD POINT
@@ -84,7 +101,8 @@ catcar$Timepoint_bin <- factor(catcar$Timepoint_bin, levels = c("Product", "Earl
 
 ### exploratory plots
 ```{r}
-p <-DimPlot(catcar, group.by = c("Patient", "Timepoint_bin", "Source", "Remission"))&scale_colour_npg()&
+p <-DimPlot(catcar, group.by = c("Patient", "Timepoint_bin", "Source", "Remission"))&
+    scale_colour_d3("category20")&
     theme_void() &
     guides(color = guide_legend(override.aes = list(size = 6))) &
     theme(
@@ -97,7 +115,7 @@ ggsave(plot=p, filename="car_only_umap_metadata.png", dpi=300, height = 10, widt
 ```
 
 ```{r}
-p <- FeaturePlot(catcar, features = c("CAT-scFv", "CD3D", "CD8A", "CD4", "LYZ", "CD79A", "NKG7", "NCAM1", "GZMB"))&scale_colour_viridis(option = "F", direction = -1)&theme_void()&NoLegend()&
+p <- FeaturePlot(catcar, features = c("CAT-scFv", "CD3D", "CD8A", "CD4", "LYZ", "CD79A", "NKG7", "CD68", "GZMB"))&scale_colour_viridis(option = "F", direction = -1)&theme_void()&NoLegend()&
     theme(
         legend.text = element_text(size = 14),
         legend.title = element_text(size = 16),
@@ -114,25 +132,35 @@ FeaturePlot(catcar, features = c("celltypist_low_score", "celltypist_high_score"
     scale_colour_viridis(option = "F", direction = -1)
 ```
 
-### want to remove the obvious myeloid cells, so subsetting based on resolution_0.5 and then re-clustering
-### whilst here will also filter out predicted doublets
+### want to remove the obvious myeloid cells, so clustering to a reaosnable resolution to allow for subsetting
 
+```{r}
+resolutions <- c(0.5)
+for (i in resolutions) {
+    catcar <- FindClusters(catcar, resolution = i, cluster.name = paste0("resolution_",i))
+}
+```
+
+### highlghting cliuster 9 and 10 as outliers
 ```{r}
 DimPlot(catcar, group.by = c("resolution_0.5"))&
     theme_void()&scale_colour_d3("category20")
+Cluster_Highlight_Plot(catcar, cluster_name = "10", highlight_color = "navy",
+    background_color = "lightgray")
+Proportion_Plot(catcar, group.by = "resolution_0.5", split.by = "Patient")+scale_fill_d3("category20")
 ```
 
 ### rename doublet groups and inspect
 ```{r}
 catcar$scDblFinder.class <- factor(catcar$scDblFinder.class, levels = c("1", "2"), labels = c("singlet", "doublet"))
 table(catcar$scDblFinder.class)
-VlnPlot(catcar, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), group.by = "scDblFinder.class", pt.size = 0)
+VlnPlot(catcar, features = c("nFeature_RNA", "nCount_RNA", "percent.mt", "percent.ribo"), group.by = "scDblFinder.class", pt.size = 0)
 ```
 
-### remove cluster 11 (the myeloid population almost exclusively from patient 6)
+### remove cluster 9 and 10 (the myeloid population almost exclusively from patient 6)
 ```{r}
 Idents(catcar) <- "resolution_0.5"
-catcar <- subset(catcar, idents = "11", invert = TRUE)
+catcar <- subset(catcar, idents = c("9","10"), invert = TRUE)
 DimPlot(catcar)&
     theme_void()&scale_colour_d3("category20")
 ```
@@ -149,20 +177,26 @@ DimPlot(catcar)&
 ```{r}
 catcar <- NormalizeData(catcar)
 catcar <- FindVariableFeatures(catcar)
-catcar <- ScaleData(catcar, vars.to.regress = c("nCount_RNA", "percent.mt"))
+catcar <- ScaleData(catcar, vars.to.regress = c("nCount_RNA", "percent.mt", "percent.ribo"))
 catcar <- RunPCA(catcar)
 ElbowPlot(catcar)
 catcar <- RunHarmony(catcar, group.by.vars = c("Patient"))
 ```
 
 ```{r}
-catcar <- FindNeighbors(catcar, dims = 1:12, reduction = "harmony")
-catcar <- RunUMAP(catcar, dims = 1:12, reduction = "harmony", seed.use =61)
-resolutions <- c(0.5,0.7, 1)
+catcar <- FindNeighbors(catcar, dims = 1:13, reduction = "harmony")
+catcar <- RunUMAP(catcar, dims = 1:13, reduction = "harmony", seed.use =61)
+resolutions <- c(0.3,0.4,0.5,0.7,1)
 for (i in resolutions) {
     catcar <- FindClusters(catcar, resolution = i, cluster.name = paste0("resolution_",i))
 }
 ```
+
+```{r}
+DimPlot(catcar, group.by = c("Patient", "Timepoint_bin", "Source", "Remission"))&
+    scale_colour_d3("category20")
+```
+
 
 ### SAVE/LOAD POINT
 ```{r}
@@ -210,7 +244,8 @@ ggsave(plot=p, filename="car_only_umap_metadata.png", dpi=300, height = 10, widt
 ```
 
 ```{r}
-p <- FeaturePlot(catcar, features = c("CAT-scFv", "CD3D", "CD8A", "CD4", "LYZ", "CD79A", "NKG7", "NCAM1", "GZMB"))&scale_colour_viridis(option = "F", direction = -1)&theme_void()&NoLegend()&
+p <- FeaturePlot(catcar, features = c("CAT-scFv", "CD3D", "CD8A", "CD8B", "CD4", "CCR7", "IL7R", "GZMB", "CD27", "TIGIT", "ITGAE", "CD69", "LYZ", "CD79A", "NKG7", "CD68"))&
+    scale_colour_viridis(option = "F", direction = -1)&theme_void()&NoLegend()&
     theme(
         legend.text = element_text(size = 14),
         legend.title = element_text(size = 16),
@@ -221,112 +256,22 @@ ggsave(plot=p, filename = "car_only_key_marker_featureplot.png", dpi=300,height=
 ```
 
 ```{r}
-DimPlot(catcar, group.by = c("resolution_0.5"))&
-    theme_void()&scale_colour_d3("category20")
-```
-
-### PROPORTIONS ANALYSIS
-```{r}
-cluster_props <- catcar@meta.data %>%
-  group_by(Patient, Remission, Timepoint_bin, celltypist_cleaned) %>%
-  summarise(n = n(), .groups = "drop") %>%
-  group_by(Patient, Remission, Timepoint_bin) %>%
-  mutate(proportion = (n / sum(n))*100) %>%
-  ungroup()
-```
-
-```{r}
-cluster_props <- filter(cluster_props, Timepoint_bin %in% c("Early", "Mid", "Late"))
-```
-
-```{r}
-ggplot(cluster_props, aes(x = Timepoint_bin, y = proportion, colour = Remission))+
-    facet_wrap(~celltypist_cleaned, scales = "free_y")+
-    geom_boxplot(outlier.shape = NA)+
-    geom_point(position = position_dodge(width=0.8))+
-    theme_bw()+scale_colour_d3("category20")
-```
-
-
-### clean up detailed celltypist labels to bin rare populations into "other"
-### any population less than 1% of cells (1860 cells) is labelled as other
-```{r}
-celltype_counts <- table(catcar$celltypist_low_label)
-
-# identify labels with <100 cells
-small_types <- names(celltype_counts[celltype_counts < 1860])
-
-# create cleaned column
-catcar$celltypist_cleaned <- ifelse(
-  catcar$celltypist_low_label %in% small_types,
-  "Other",
-  catcar$celltypist_low_label
-)
-```
-
-### make unified colour palette for plots
-```{r}
-celltypes <- levels(factor(catcar$celltypist_cleaned))
-
-cols <- pal_d3("category20")(length(celltypes))
-
-names(cols) <- celltypes
-```
-
-```{r}
-p <- DimPlot(catcar, group.by = c("celltypist_cleaned"), raster = F)&theme_void()&scale_colour_d3("category20")
+p <- DimPlot(catcar, group.by = c("resolution_0.5"), label = T, label.box = T, label.size = 6)&
+    theme_void()&scale_colour_d3("category20")&scale_fill_d3("category20")
 p
-ggsave(plot=p, filename="car_only_umap_celltypist_cleaned.png", dpi=300, height = 6, width = 8, bg="white")
+ggsave(plot=p,filename="car_only_res_0.5_umap.png", dpi = 300, height = 6, width = 7)
+Proportion_Plot(catcar, group.by = "resolution_0.5", split.by = "Patient")+scale_fill_d3("category20")
+Proportion_Plot(catcar, group.by = "resolution_0.5", split.by = "Timepoint_bin")+scale_fill_d3("category20")
 ```
 
-### proportions of celltypist populations
-```{r}
-p <- Proportion_Plot(catcar, group.by="celltypist_cleaned", split.by="Timepoint_bin")+scale_fill_manual(values = cols)
-p
-ggsave(plot=p, filename = "catcar_celltypist_cleaned_proportions_by_time.png", dpi=300, height = 6, width = 6)
-```
 
-### proportions by outcome
-```{r}
-p <- Proportion_Plot(catcar, group.by="celltypist_cleaned", split.by="time_outcome")+scale_fill_manual(values = cols)
-p
-ggsave(plot=p, filename = "catcar_celltypist_cleaned_proportions_by_time_outcome.png", dpi=300, height = 6, width = 8)
-```
-
-### proportions by patient
-```{r}
-p <- Proportion_Plot(catcar, group.by="celltypist_cleaned", split.by="Patient")+scale_fill_manual(values = cols)
-p
-ggsave(plot=p, filename = "catcar_celltypist_cleaned_proportions_by_patient.png", dpi=300, height = 6, width = 8)
-```
-
-### CLUSTERING AND ANNOTATION
-```{r}
-p <- DimPlot(catcar, group.by = "resolution_0.5", label = T, label.box = T, label.size = 6)+
-    scale_colour_d3("category20")+scale_fill_d3("category20")
-p
-ggsave(plot = p, filename = "catcar_resolution_0.5.png", dpi=300, height = 6, width = 8)
-```
-
-### for my own curiosity, running dea between the two major product clusters
-```{r}
-Idents(catcar) <- "resolution_0.5"
-product_degs <- FindMarkers(catcar, ident.1 = "0", ident.2 = "4", thresh.use = 1, min.pct = 0.25, only.pos = F, test.use = "wilcox")
-product_degs <- filter(product_degs, p_val_adj < 0.05)
-```
+### ANNOTATION
+### not providing bioogical names at this point, just cluster1 cluster 2 etc
+### resolution 0.5 seems reasonable
+### merging cluster 11 (only 29 cells and tiny) into its neighbour cluster 4 as part of naming process
 
 ```{r}
-DotPlot(catcar, group.by = "resolution_0.5", features = c("CD8A", "CD4", "CCR7", "SELL", "IL7R", "LRRN3", "TCF7", "LEF1", "GZMB", "GZMK", "GZMH", "LTB", "CD27", "CD28", "FOXP3", "TIGIT"))+scale_colour_viridis(option = "rocket", direction = -1)
-```
-
-```{r}
-p <- Proportion_Plot(catcar, group.by = "resolution_0.5")+scale_fill_d3("category20")
-p
-ggsave(plot=p, filename = "resolution_0.5_proportions.png", dpi = 300, height = 5, width = 5)
-```
-
-```{r}
-clusters <- c("0" = "c0", "1" = "c1", "2" = "c2", "3" = "c3", "4" = "c0", "5" = "c4", "6" = "c1", "7" = "c5", "8" = "c0", "9" = "c1", "10" = "c0", "11" = "c0", "12" = "c1")
+clusters <- c("0" = "c0", "1" = "c1", "2" = "c2", "3" = "c3", "4" = "c4", "5" = "c5", "6" = "c6", "7" = "c7", "8" = "c8", "9" = "c9", "10" = "c10", "11" = "c4")
 Idents(catcar) <- "resolution_0.5"
 catcar <- RenameIdents(catcar, clusters)
 catcar@active.ident
@@ -743,24 +688,30 @@ reactome_res$Description
 ```{r}
 p <- gseaplot2(reactome_res, geneSetID = 25, title = reactome_res$Description[25])
 p
-ggsave(plot = p, filename = "KRAB_ZFP_enrichment_plot.png", dpi = 300, height = 3, width = 6)
+ggsave(plot = p, filename = "KRAB_ZFP_enrichment_plot.png", dpi = 300, height = 5, width = 6)
 ```
 
 ### get the genes that contribute to the KRAB-ZFP pathway
 ### filter on whether they are major contributors
 ```{r}
-rank_table <- gsearank(reactome_res_readable, 18, output = "table")
+rank_table <- gsearank(reactome_res_readable, 25, output = "table")
 major_table <- filter(rank_table, `core enrichment` == "YES")
 krab_zfp_genes <- major_table$gene
 ```
 
 ### plot these genes in the seurat object
 ```{r}
-DotPlot(catcar, features = krab_zfp_genes, group.by = "Timepoint_bin", scale.by = "size")+scale_colour_viridis(option = "rocket")+coord_flip()
+p <- DotPlot(catcar, features = krab_zfp_genes, group.by = "Timepoint_bin", scale.by = "size")+
+    scale_colour_viridis(option = "plasma", direction = -1)+coord_flip()
+p
+ggsave(plot=p, filename = "KRAB_ZFP_genes_dotplot.png", dpi = 300, height = 6, width = 8)
 ```
 
 ```{r}
-DotPlot(catcar, features = krab_zfp_genes, group.by = "time_outcome", scale.by = "size")+scale_colour_viridis(option = "rocket")+coord_flip()
+p <- DotPlot(catcar, features = krab_zfp_genes, group.by = "time_outcome", scale.by = "size")+
+    scale_colour_viridis(option = "plasma", direction = -1)+coord_flip()+theme(axis.text.x=element_text(angle=45, hjust = 1, vjust = 1))
+p
+ggsave(plot=p, filename = "KRAB_ZFP_genes_outcome_dotplot.png", dpi = 300, height = 6, width = 8)
 ```
 
 ### OVER-ENRICHMENT ANALYSIS
