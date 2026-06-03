@@ -303,9 +303,34 @@ ggsave(plot=combo, filename = "catcar_basic_labels_proportions.png", dpi = 300, 
 ### Idenitfying key markers in each cluster
 ```{r}
 Idents(catcar) <- "basic_clusters"
-cluster_degs <- FindAllMarkers(catcar, min.pct = 0.2, logfc.threshold = 0.5, test.use = "LR", latent.vars = "Patient", only.pos = T)
+cluster_degs <- FindAllMarkers(catcar, min.pct = 0.2, logfc.threshold = 0.5, test.use = "wilcox", only.pos = T)
+write.csv(cluster_degs, file="basic_clusters_degs.csv")
 ```
 
+### overlaying celltypist prediction
+### first cleaning celtypist prediction up to only show top populations
+### 95,704 cells, will bin labels < 1% into "other"
+
+```{r}
+celltype_counts <- table(catcar$celltypist_low_label)
+min_cells <- 95704*0.01
+rare_types <- names(celltype_counts[celltype_counts < min_cells])
+
+# Create new metadata column
+catcar$celltypist_simplified <- ifelse(
+  catcar$celltypist_low_label %in% rare_types,
+  "Other",
+  as.character(catcar$celltypist_low_label)
+)
+
+# Optional: convert back to factor
+catcar$celltypist_simplified <- factor(catcar$celltypist_simplified)
+```
+
+```{r}
+DimPlot(catcar, group.by = "celltypist_simplified")+scale_colour_d3("category20")
+Proportion_Plot(catcar, group.by = "celltypist_simplified", split.by = "Timepoint_bin")+scale_fill_d3("category20")
+```
 
 
 ### PSEUDOBULK DIFFERENTIAL EXPRESSION ANALYSIS
