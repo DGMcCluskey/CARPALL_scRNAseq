@@ -244,7 +244,7 @@ ggsave(plot=p, filename="car_only_umap_metadata.png", dpi=300, height = 10, widt
 ```
 
 ```{r}
-p <- FeaturePlot(catcar, features = c("CAT-scFv", "CD3D", "CD8A", "CD8B", "CD4", "CCR7", "IL7R", "GZMB", "CD27", "TIGIT", "ITGAE", "CD69", "LYZ", "CD79A", "NKG7", "CD68"))&
+p <- FeaturePlot(catcar, features = c("CAT-scFv", "CD3D", "CD8A", "CD8B", "CD4", "CCR7", "IL7R", "TCF7", "GZMB", "GZMK", "CD27", "TIGIT", "ITGAE", "CD69", "NKG7", "MKI67"))&
     scale_colour_viridis(option = "F", direction = -1)&theme_void()&NoLegend()&
     theme(
         legend.text = element_text(size = 14),
@@ -284,12 +284,29 @@ catcar[["basic_clusters"]] <- catcar@active.ident
 catcar <- readRDS("car_only_2nd_clustering.rds")
 ```
 
+### plotting basic cluister visualisations
 ```{r}
 p <- DimPlot(catcar, group.by = "basic_clusters", label = T, label.box = T, label.size = 6)+
-    scale_colour_d3("category20")+scale_fill_d3("category20")
+    scale_colour_d3("category20")+scale_fill_d3("category20")+theme_void()
 p
-ggsave(plot = p, filename = "catcar_basic_labels.png", dpi=300, height = 6, width = 8)
+ggsave(plot = p, filename = "catcar_basic_labels_umap.png", dpi=300, height = 6, width = 8)
 ```
+
+```{r}
+p1 <- Proportion_Plot(catcar, group.by = "basic_clusters", split.by = "Patient")+scale_fill_d3("category20")
+p2 <- Proportion_Plot(catcar, group.by = "basic_clusters", split.by = "Timepoint_bin")+scale_fill_d3("category20")
+combo <- p1+NoLegend()+p2+plot_layout(ncol=2)
+combo
+ggsave(plot=combo, filename = "catcar_basic_labels_proportions.png", dpi = 300, height = 6, width = 10)
+```
+
+### Idenitfying key markers in each cluster
+```{r}
+Idents(catcar) <- "basic_clusters"
+cluster_degs <- FindAllMarkers(catcar, min.pct = 0.2, logfc.threshold = 0.5, test.use = "LR", latent.vars = "Patient", only.pos = T)
+```
+
+
 
 ### PSEUDOBULK DIFFERENTIAL EXPRESSION ANALYSIS
 ### comparing timepoints of product first
