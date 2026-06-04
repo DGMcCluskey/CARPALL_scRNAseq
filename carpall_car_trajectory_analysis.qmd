@@ -12,6 +12,8 @@ library(ggplot2)
 library(scran)
 library(scater)
 library(igraph)
+library(tidyr)
+library(viridis)
 ```
 
 ```{r}
@@ -27,9 +29,29 @@ counts <- catcar[["RNA"]]$counts
 
 ```{r}
 set.seed(61)
-lineages <- getLineages(data = dimred, clusterLabels = clustering, start.clus = "c6")
+sce <- SingleCellExperiment(
+  assays = list(counts = counts)
+)
 
-lineages
+reducedDim(sce, "UMAP") <- dimred
+colData(sce)$cluster <- clustering
+
+sce <- slingshot(
+  sce,
+  clusterLabels = "cluster",
+  reducedDim = "UMAP",
+  start.clus = "c6"
+)
+```
+
+### summary of results
+```{r}
+SlingshotDataSet(sce)
+```
+
+### save object to not have to run again
+```{r}
+saveRDS(sce, file = "slingshot_output/catcar_slingshot_object.rds")
 ```
 
 ```{r}
@@ -47,7 +69,7 @@ cell_cols <- cluster_cols[as.character(clustering)]
 
 ### extracting MST and nodes to plot manually using ggplot
 ```{r}
-mst <- slingMST(lineages)
+mst <- slingMST(sce)
 
 nodes <- data.frame(
   cluster = V(mst)$name,
@@ -77,9 +99,9 @@ edges
 
 ```{r}
 cell_df <- data.frame(
-  UMAP_1 = dimred[,1],
-  UMAP_2 = dimred[,2],
-  cluster = clustering
+  UMAP_1 = reducedDim(sce, "UMAP")[,1],
+  UMAP_2 = reducedDim(sce, "UMAP")[,2],
+  cluster = sce$cluster
 )
 
 p <- ggplot(cell_df, aes(UMAP_1, UMAP_2)) +
@@ -110,14 +132,14 @@ ggsave(plot=p, filename = "pseudotime_MST_umap.png", dpi = 300, height = 6, widt
 ```
 
 ```{r}
-curves <- getCurves(lineages, approx_points = 150, thresh = 0.01, stretch = 0.8, allow.breaks = FALSE, shrink = 0.99)
+curves <- slingCurves(sce)
 curves
 ```
 
 ```{r}
-curve_dfs <- lapply(seq_along(slingCurves(curves)), function(i) {
+curve_dfs <- lapply(seq_along(curves), function(i) {
 
-  crv <- slingCurves(curves)[[i]]
+  crv <- curves[[i]]
 
   data.frame(
     UMAP_1 = crv$s[,1],
@@ -180,7 +202,7 @@ ggsave(plot=p, filename = "pseuodtime_lineages_umap.png", dpi = 300, height = 6,
 
 ### add lineage info to cell_df to be able to plot on umap
 ```{r}
-pt <- slingPseudotime(curves)
+pt <- slingPseudotime(sce)
 cell_df$pt_L1 <- pt[, "Lineage1"]
 cell_df$pt_L2 <- pt[, "Lineage2"]
 cell_df$pt_L3 <- pt[, "Lineage3"]
@@ -211,14 +233,29 @@ p
 ggsave(plot = p, filename= "catcar_pseudotime_gradient_umaps.png", dpi = 300, height = 6, width = 2)
 ```
 
+
 # TRADESEQ
-### usign tradeseq to run DE anlaysis specialised on pseudotime and lineage data
+### using tradeseq to run DE anlaysis specialised on pseudotime and lineage data
 ```{r}
 library(tradeSeq)
 ```
 
+### extract slingshotdataset from the sce as input for tradeseq
+
+```{r}
+sds <- SlingshotDataSet(sce)
+class(sds)
+```
+
 ```{r}
 set.seed(61)
-icMat <- evaluateK(counts = counts, sds = crv, k = 3:10, 
-                   nGenes = 200, verbose = T)
+
+gene_cells <- Matrix::rowSums(counts > 0)
+min_cells <- 50
+genes_keep <- names(gene_cells[gene_cells >= min_cells])
+
+BPPARAM <- BiocParallel::bpparam()
+BPPARAM$workers <- 10
+
+gam <- fitGAM(counts = sce, genes = genes_keep, verbose = T, parallel = T, BPPARAM = BPPARAM)
 ```
