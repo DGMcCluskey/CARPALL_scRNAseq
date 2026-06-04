@@ -1,0 +1,150 @@
+---
+title: "Untitled"
+format: html
+---
+
+
+```{r}
+library(slingshot)
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+library(scran)
+library(scater)
+library(igraph)
+```
+
+```{r}
+catcar <- readRDS("car_only_basic_annotation.rds")
+```
+
+### extract individual elements of data for slingshot input
+```{r}
+dimred <- catcar@reductions$umap@cell.embeddings
+clustering <- catcar$basic_clusters
+counts <- catcar[["RNA"]]$counts
+```
+
+```{r}
+set.seed(61)
+lineages <- getLineages(data = dimred, clusterLabels = clustering, start.clus = "c6")
+
+lineages
+```
+
+```{r}
+palette <- ggsci::pal_d3("category20")(20)
+
+# Create a color lookup table
+cluster_cols <- setNames(
+  palette[seq_along(levels(clustering))],
+  levels(clustering)
+)
+
+# Assign a color to each cell based on its cluster
+cell_cols <- cluster_cols[as.character(clustering)]
+```
+
+### extracting MST and nodes to plot manually using ggplot
+```{r}
+mst <- slingMST(lineages)
+
+nodes <- data.frame(
+  cluster = V(mst)$name,
+  do.call(rbind, vertex_attr(mst, "coordinates"))
+)
+
+colnames(nodes)[2:3] <- c("UMAP_1", "UMAP_2")
+
+nodes
+```
+
+```{r}
+edge_list <- as.data.frame(get.edgelist(mst))
+
+colnames(edge_list) <- c("from", "to")
+```
+
+```{r}
+edges <- edge_list %>%
+  left_join(nodes, by = c("from" = "cluster")) %>%
+  rename(x = UMAP_1, y = UMAP_2) %>%
+  left_join(nodes, by = c("to" = "cluster")) %>%
+  rename(xend = UMAP_1, yend = UMAP_2)
+
+edges
+```
+
+```{r}
+cell_df <- data.frame(
+  UMAP_1 = dimred[,1],
+  UMAP_2 = dimred[,2],
+  cluster = clustering
+)
+
+ggplot(cell_df, aes(UMAP_1, UMAP_2)) +
+  geom_point(aes(colour = cluster), size = 0.3) +
+  geom_segment(
+    data = edges,
+    aes(
+      x = x,
+      y = y,
+      xend = xend,
+      yend = yend
+    ),
+    inherit.aes = FALSE,
+    linewidth = 1.2,
+    colour = "black"
+  ) +
+    geom_point(
+    data = nodes,
+    aes(UMAP_1, UMAP_2),
+    inherit.aes = FALSE,
+    size = 4,
+    colour = "black"
+  ) +
+  scale_colour_manual(values = cluster_cols) +
+  theme_classic()
+```
+
+```{r}
+curves <- getCurves(lineages, approx_points = 150, thresh = 0.01, stretch = 0.8, allow.breaks = FALSE, shrink = 0.99)
+curves
+```
+
+```{r}
+curve_dfs <- lapply(seq_along(slingCurves(curves)), function(i) {
+
+  crv <- slingCurves(curves)[[i]]
+
+  data.frame(
+    UMAP_1 = crv$s[,1],
+    UMAP_2 = crv$s[,2],
+    lineage = paste0("Lineage_", i),
+    order = seq_len(nrow(crv$s))
+  )
+})
+
+curve_df <- do.call(rbind, curve_dfs)
+```
+
+```{r}
+ggplot(cell_df, aes(UMAP_1, UMAP_2)) +
+  geom_point(
+    aes(colour = cluster),
+    size = 0.3
+  ) +
+  geom_path(
+    data = curve_df,
+    aes(
+      UMAP_1,
+      UMAP_2,
+      group = lineage
+    ),
+    inherit.aes = FALSE,
+    linewidth = 1.5,
+    colour = "black"
+  ) +
+  scale_colour_manual(values = cluster_cols) +
+  theme_classic()
+```
