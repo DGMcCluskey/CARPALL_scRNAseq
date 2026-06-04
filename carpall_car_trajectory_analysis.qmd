@@ -259,3 +259,52 @@ BPPARAM$workers <- 10
 
 gam <- fitGAM(counts = sce, genes = genes_keep, verbose = T, parallel = T, BPPARAM = BPPARAM)
 ```
+
+### tradeseq is computationally heavy so plotting some canonical genes manually to get an idea of results
+
+### first scale pseudotime to account for different pseudotime value ranges in each lineage
+```{r}
+pt <- slingPseudotime(sce)
+pt_scaled <- apply(pt, 2, function(x) {
+  rng <- range(x, na.rm = TRUE)
+  (x - rng[1]) / (rng[2] - rng[1])
+})
+pt_pct <- pt_scaled * 100
+```
+```{r}
+genes <- c("TCF7","GZMB","IFNG", "TIGIT", "FOXP3", "SELL", "GATA3", "RORC", "TBX21")
+expr <- as.matrix(
+  GetAssayData(catcar, assay = "RNA", slot = "data")[genes, ]
+)
+
+expr_df <- as.data.frame(t(expr))
+expr_df$cell <- rownames(expr_df)
+
+pt_df <- as.data.frame(pt_pct)
+pt_df$cell <- rownames(pt_df)
+
+merged <- merge(expr_df, pt_df, by = "cell")
+```
+
+```{r}
+expr_long <- pivot_longer(
+  merged,
+  cols = all_of(genes),
+  names_to = "gene",
+  values_to = "expression"
+)
+
+plot_long <- pivot_longer(
+  expr_long,
+  cols = starts_with("Lineage"),
+  names_to = "lineage",
+  values_to = "pseudotime"
+)
+
+plot_long <- subset(plot_long, !is.na(pseudotime))
+```
+
+```{r}
+ggplot(plot_long, aes(pseudotime, expression, colour = lineage)) +
+  geom_smooth(se = FALSE) + facet_wrap(~gene, scales = "free_y")+theme_classic()+scale_colour_manual(values=lineage_cols)
+```
