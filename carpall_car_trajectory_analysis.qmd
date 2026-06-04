@@ -82,7 +82,7 @@ cell_df <- data.frame(
   cluster = clustering
 )
 
-ggplot(cell_df, aes(UMAP_1, UMAP_2)) +
+p <- ggplot(cell_df, aes(UMAP_1, UMAP_2)) +
   geom_point(aes(colour = cluster), size = 0.3) +
   geom_segment(
     data = edges,
@@ -105,6 +105,8 @@ ggplot(cell_df, aes(UMAP_1, UMAP_2)) +
   ) +
   scale_colour_manual(values = cluster_cols) +
   theme_classic()
+p
+ggsave(plot=p, filename = "pseudotime_MST_umap.png", dpi = 300, height = 6, width = 8)
 ```
 
 ```{r}
@@ -126,25 +128,97 @@ curve_dfs <- lapply(seq_along(slingCurves(curves)), function(i) {
 })
 
 curve_df <- do.call(rbind, curve_dfs)
+curve_df$lineage <- gsub("_", "", curve_df$lineage)
 ```
 
 ```{r}
-ggplot(cell_df, aes(UMAP_1, UMAP_2)) +
+slingLineages(lineages)
+```
+
+```{r}
+lin <- slingLineages(lineages)
+
+terminal_cluster <- sapply(lin, tail, 1)
+
+lineage_cols <- cluster_cols[terminal_cluster]
+lineage_cols <- scales::alpha(lineage_cols, 0.7)
+
+# CRITICAL FIX:
+names(lineage_cols) <- names(lin)
+```
+
+```{r}
+p <- ggplot(cell_df, aes(UMAP_1, UMAP_2)) +
+
+  # --- cells (cluster colour scale 1)
   geom_point(
     aes(colour = cluster),
-    size = 0.3
+    size = 0.3, alpha = 0.1
   ) +
+  scale_colour_manual(values = cluster_cols) +
+
+  ggnewscale::new_scale_colour() +
+
+  # --- lineages (second independent colour scale)
   geom_path(
     data = curve_df,
     aes(
       UMAP_1,
       UMAP_2,
-      group = lineage
+      group = lineage,
+      colour = lineage
     ),
-    inherit.aes = FALSE,
-    linewidth = 1.5,
-    colour = "black"
+    linewidth = 1.7,
+    arrow = arrow(type = "closed", length = unit(0.15, "inches"))
   ) +
-  scale_colour_manual(values = cluster_cols) +
+  scale_colour_manual(values = lineage_cols) +
+
   theme_classic()
+p
+ggsave(plot=p, filename = "pseuodtime_lineages_umap.png", dpi = 300, height = 6, width = 8)
+```
+
+### add lineage info to cell_df to be able to plot on umap
+```{r}
+pt <- slingPseudotime(curves)
+cell_df$pt_L1 <- pt[, "Lineage1"]
+cell_df$pt_L2 <- pt[, "Lineage2"]
+cell_df$pt_L3 <- pt[, "Lineage3"]
+cell_df$pt_L4 <- pt[, "Lineage4"]
+cell_df$pt_L5 <- pt[, "Lineage5"]
+```
+```{r}
+pt_df <- as.data.frame(pt)
+pt_df$cell <- rownames(pt_df)
+
+pt_long <- pivot_longer(
+  pt_df,
+  cols = starts_with("Lineage"),
+  names_to = "lineage",
+  values_to = "pseudotime"
+)
+pt_long <- merge(pt_long, cell_df, by.x = "cell", by.y = "row.names")
+```
+
+```{r}
+p <- ggplot(pt_long, aes(UMAP_1, UMAP_2, color = pseudotime)) +
+  geom_point(size = 0.3) +
+  facet_wrap(~ lineage, ncol=1) +
+  scale_color_viridis(option = "rocket", direction = -1) +
+  theme_void()+
+  theme(strip.text=element_text(size=14, colour = "black", face = "bold"))
+p
+ggsave(plot = p, filename= "catcar_pseudotime_gradient_umaps.png", dpi = 300, height = 6, width = 2)
+```
+
+# TRADESEQ
+### usign tradeseq to run DE anlaysis specialised on pseudotime and lineage data
+```{r}
+library(tradeSeq)
+```
+
+```{r}
+set.seed(61)
+icMat <- evaluateK(counts = counts, sds = crv, k = 3:10, 
+                   nGenes = 200, verbose = T)
 ```
