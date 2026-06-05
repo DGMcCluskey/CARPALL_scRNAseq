@@ -307,6 +307,12 @@ cluster_degs <- FindAllMarkers(catcar, min.pct = 0.2, logfc.threshold = 0.5, tes
 write.csv(cluster_degs, file="basic_clusters_degs.csv")
 ```
 
+### plotting canonical genes from carpall paper and wider literature to get an idea of what each cluster is
+```{r}
+DotPlot(catcar, group.by = "basic_clusters", features = c("CD4", "CD8A", "CD8B", "CCR7", "SELL", "IL7R", "TCF7", "TRGV1", "GZMH", "PRF1", "GZMK", "GZMA", "GZMB", "MKI67", "FOXP3", "IL2RA", "TIGIT", "CTLA4", "LAG3", "PDCD1", "IFNG", "TNF", "IL12A", "STAT4", "TBX21", "EOMES", "SATB1", "NFATC1", "IRF4", "BATF", "NR4A"), scale.by ="size", dot.scale = 10)+scale_colour_distiller(palette = "RdYlBu")
+```
+
+
 ### overlaying celltypist prediction
 ### first cleaning celtypist prediction up to only show top populations
 ### 95,704 cells, will bin labels < 1% into "other"

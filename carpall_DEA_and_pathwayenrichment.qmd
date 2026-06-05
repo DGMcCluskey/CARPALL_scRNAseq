@@ -1,0 +1,82 @@
+---
+title: "Untitled"
+format: html
+---
+# DIFFERNTIAL EXPRESSION AND PATHWAY ENRICHMENT ANALYSIS OF BASIC CLUSTERS
+
+```{r}
+library(Seurat)
+library(dplyr)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(ReactomePA)
+library(enrichplot)
+library(stringr)
+library(presto)
+```
+
+### to avoid the overwhelming signal of product cells, these will be excluded
+```{r}
+Idents(catcar) <- "Timepoint_bin"
+no_product <- subset(catcar, idents = c("Early", "Mid", "Late"))
+```
+
+### run findallmarkers to find the unique signature of the reamining clusters
+### to speed things up, will parallelise by running future.apply
+```{r}
+Idents(no_product) <- "basic_clusters"
+idents <- levels(Idents(no_product))
+
+markers <- lapply(idents, function(x) {
+  FindMarkers(
+    object = no_product,
+    ident.1 = x,
+    test.use = "wilcox",
+    min.pct = 0.1
+  )
+})
+```
+
+
+```{r}
+degs <- read.csv("basic_clusters_degs.csv")
+c1_degs <- filter(degs, cluster == "c1")
+c1_degs <- filter(c1_degs, p_val_adj < 0.05)
+```
+
+```{r}
+genes <- c1_degs$gene
+
+go_enrich <- enrichGO(
+    gene = genes,
+    OrgDb = org.Hs.eg.db,
+    keyType = "SYMBOL"
+)
+```
+
+```{r}
+enriched_pathways <- go_enrich@result
+enriched_pathways <- filter(enriched_pathways, qvalue < 0.05)
+```
+
+```{r}
+gene_conv <- bitr(
+    c1_degs$gene,
+    fromType = "SYMBOL",
+    toType = "ENTREZID",
+    OrgDb = org.Hs.eg.db
+)
+
+reactome_enrich <- enrichPathway(gene=gene_conv$ENTREZID, pvalueCutoff = 0.05, readable = T)
+```
+```{r}
+react_pathways <- reactome_enrich@result
+react_pathways <- filter(react_pathways, p.adjust < 0.05)
+```
+
+```{r}
+p <- ggplot(react_pathways, aes( x = zScore, y = reorder(Description, zScore), fill = p.adjust))+geom_col()+theme_bw()+scale_fill_distiller(palette = "Reds")+theme(axis.text = element_text(size = 14, colour = "black"))+ylab(NULL)+
+     scale_y_discrete(labels = function(x) str_wrap(x, width = 50))
+p
+ggsave(plot = p, filename = "cluster1_reactome_pathways.png", dpi = 300, height = 8, width = 8)
+```
