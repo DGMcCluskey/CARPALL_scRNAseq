@@ -13,45 +13,54 @@ library(ReactomePA)
 library(enrichplot)
 library(stringr)
 library(presto)
+library(ggplot2)
+library(viridis)
+library(RColorBrewer)
 ```
 
 ### to avoid the overwhelming signal of product cells, these will be excluded
 ```{r}
+catcar <- readRDS("car_only_basic_annotation.rds")
 Idents(catcar) <- "Timepoint_bin"
 no_product <- subset(catcar, idents = c("Early", "Mid", "Late"))
 ```
 
-### run findallmarkers to find the unique signature of the reamining clusters
-### to speed things up, will parallelise by running future.apply
+### run findallmarkers to find the unique signature of the remaining clusters
 ```{r}
 Idents(no_product) <- "basic_clusters"
-idents <- levels(Idents(no_product))
 
-markers <- lapply(idents, function(x) {
-  FindMarkers(
-    object = no_product,
-    ident.1 = x,
-    test.use = "wilcox",
-    min.pct = 0.1
-  )
-})
+cluster_degs <- FindAllMarkers(no_product, min.pct = 0.1, only.pos = T)
+cluster_degs_sig <- filter(cluster_degs, p_val_adj < 0.05)
+table(cluster_degs_sig$cluster)
+write.csv(cluster_degs, file="basic_clusters_degs.csv")
+```
+
+### also get list of unique degs per cluster
+```{r}
+ unique_degs <- cluster_degs_sig %>%
+  distinct(cluster, gene) %>%
+  add_count(gene) %>%
+  filter(n == 1) %>%
+  dplyr::select(-n)
 ```
 
 
 ```{r}
-degs <- read.csv("basic_clusters_degs.csv")
-c1_degs <- filter(degs, cluster == "c1")
-c1_degs <- filter(c1_degs, p_val_adj < 0.05)
+cluster_degs <- read.csv("basic_clusters_degs.csv")
 ```
 
 ```{r}
-genes <- c1_degs$gene
+cluster_degs_sig <- filter(cluster_degs, p_val_adj < 0.05)
+cx_degs <- filter(cluster_degs_sig, cluster == "c2")
+genes <- cx_degs$gene
 
 go_enrich <- enrichGO(
     gene = genes,
     OrgDb = org.Hs.eg.db,
     keyType = "SYMBOL"
 )
+
+go_enrich <- simplify(go_enrich, cutoff=0.7, by="p.adjust", select_fun=min)
 ```
 
 ```{r}
@@ -61,13 +70,20 @@ enriched_pathways <- filter(enriched_pathways, qvalue < 0.05)
 
 ```{r}
 gene_conv <- bitr(
-    c1_degs$gene,
+    cx_degs$gene,
     fromType = "SYMBOL",
     toType = "ENTREZID",
     OrgDb = org.Hs.eg.db
 )
 
-reactome_enrich <- enrichPathway(gene=gene_conv$ENTREZID, pvalueCutoff = 0.05, readable = T)
+background_genes <- rownames(no_product)
+
+bg_conv <- bitr(background_genes, 
+                fromType = "SYMBOL", 
+                toType = "ENTREZID", 
+                OrgDb = org.Hs.eg.db)
+
+reactome_enrich <- enrichPathway(gene=gene_conv$ENTREZID, universe = bg_conv$ENTREZID, pvalueCutoff = 0.05, readable = T)
 ```
 ```{r}
 react_pathways <- reactome_enrich@result
@@ -75,8 +91,12 @@ react_pathways <- filter(react_pathways, p.adjust < 0.05)
 ```
 
 ```{r}
-p <- ggplot(react_pathways, aes( x = zScore, y = reorder(Description, zScore), fill = p.adjust))+geom_col()+theme_bw()+scale_fill_distiller(palette = "Reds")+theme(axis.text = element_text(size = 14, colour = "black"))+ylab(NULL)+
-     scale_y_discrete(labels = function(x) str_wrap(x, width = 50))
+top_pathways <- react_pathways %>% arrange(desc(zScore)) %>% slice_head(n=15)
+```
+
+```{r}
+p <- ggplot(top_pathways, aes( x = zScore, y = reorder(Description, zScore), fill = p.adjust))+geom_col()+theme_bw()+scale_fill_distiller(palette = "Greens")+theme(axis.text = element_text(size = 14, colour = "black"))+ylab(NULL)+
+     scale_y_discrete(labels = function(x) str_wrap(x, width = 60))
 p
-ggsave(plot = p, filename = "cluster1_reactome_pathways.png", dpi = 300, height = 8, width = 8)
+ggsave(plot = p, filename = "cluster2_reactome_pathways.png", dpi = 300, height = 5, width = 10)
 ```
