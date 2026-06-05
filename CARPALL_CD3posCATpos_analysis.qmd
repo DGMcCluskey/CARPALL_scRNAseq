@@ -332,6 +332,50 @@ DimPlot(catcar, group.by = "celltypist_simplified")+scale_colour_d3("category20"
 Proportion_Plot(catcar, group.by = "celltypist_simplified", split.by = "Timepoint_bin")+scale_fill_d3("category20")
 ```
 
+### plotting density of early, mid and late cells across the umap
+```{r}
+df <- data.frame(
+  UMAP_1 = Embeddings(catcar, "umap")[,1],
+  UMAP_2 = Embeddings(catcar, "umap")[,2],
+  Timepoint = catcar$Timepoint_bin
+)
+
+hull_df <- df %>%
+  group_by(Timepoint) %>%
+  group_modify(~{
+    pts <- as.matrix(.x[, c("UMAP_1", "UMAP_2")])
+    hull_idx <- chull(pts)
+
+    data.frame(
+      UMAP_1 = pts[hull_idx, 1],
+      UMAP_2 = pts[hull_idx, 2]
+    )
+  })
+```
+
+```{r}
+p <- ggplot(df, aes(x=UMAP_1, y= UMAP_2)) +
+  stat_density_2d_filled(alpha = 1, contour_var = "ndensity", n = 100) +
+  geom_polygon(
+    data = hull_df,
+    aes(UMAP_1, UMAP_2),
+    fill = NA,
+    colour = "yellow",
+    linewidth = 0.4
+  ) +
+  facet_wrap(~Timepoint, ncol = 4) +
+  theme_classic()+
+    scale_fill_viridis_d(option = "rocket")+theme_void()+
+    theme(
+        strip.text = element_text(size=14, face="bold"),
+        legend.text = element_text(size = 14),
+        legend.title = element_text(size = 16),
+        plot.title = element_text(size = 18, face = "bold")
+    )
+p
+ggsave(plot = p, filename = "catcar_umap_density.png", dpi = 300, height = 4, width = 16)
+```
+
 # SAVE/LOAD POINT
 ```{r}
 #saveRDS(catcar, file = "car_only_basic_annotation.rds", compress = F)
