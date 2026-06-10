@@ -34,6 +34,7 @@ library(clusterProfiler)
 library(org.Hs.eg.db)
 library(ReactomePA)
 library(enrichplot)
+library(clustree)
 ```
 
 
@@ -192,7 +193,7 @@ catcar <- RunHarmony(catcar, group.by.vars = c("Patient"))
 ```{r}
 catcar <- FindNeighbors(catcar, dims = 1:13, reduction = "harmony")
 catcar <- RunUMAP(catcar, dims = 1:13, reduction = "harmony", seed.use =61)
-resolutions <- c(0.3,0.4,0.5,0.7,1)
+resolutions <- c(0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1,1.1,1.2)
 for (i in resolutions) {
     catcar <- FindClusters(catcar, resolution = i, cluster.name = paste0("resolution_",i))
 }
@@ -270,6 +271,10 @@ Proportion_Plot(catcar, group.by = "resolution_0.5", split.by = "Patient")+scale
 Proportion_Plot(catcar, group.by = "resolution_0.5", split.by = "Timepoint_bin")+scale_fill_d3("category20")
 ```
 
+# inspecting resolutions using clustree
+```{r}
+clustree(catcar, prefix = "resolution_")
+```
 
 ### ANNOTATION
 ### not providing bioogical names at this point, just cluster1 cluster 2 etc
