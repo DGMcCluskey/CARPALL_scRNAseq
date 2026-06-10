@@ -3,6 +3,12 @@ title: "Untitled"
 format: html
 ---
 
+```{r}
+library(renv)
+pkgs <- renv::dependencies()$Package
+install.packages(setdiff(unique(pkgs), rownames(installed.packages())))
+BiocManager::install(setdiff(unique(pkgs), rownames(installed.packages())))
+```
 
 ```{r}
 library(Seurat)
